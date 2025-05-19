@@ -3,6 +3,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+import cors from 'cors';
 
 // Load environment variables
 dotenv.config();
@@ -23,49 +24,31 @@ connectDB();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Custom CORS middleware - most reliable approach
-app.use((req, res, next) => {
-  // Define allowed origins - include both your custom domain and default DigitalOcean domains
-  const allowedOrigins = [
-    'https://sri-express.mehara.io',
-    'https://clownfish-app-ymy8k.ondigitalocean.app',
-    'http://localhost:3000'
-  ];
-  
-  const origin = req.headers.origin;
-  
-  // Set CORS headers for all requests
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    // For development or unknown origins
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  }
-  
-  // Allow credentials
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  
-  // Allow specific headers
-  res.setHeader('Access-Control-Allow-Headers', 
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
-  // Allow specific methods
-  res.setHeader('Access-Control-Allow-Methods', 
-    'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  
-  // Handle preflight requests (OPTIONS)
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
-  // Move to the next middleware
-  next();
-});
+// Define allowed origins
+const allowedOrigins = [
+  'https://sri-express.mehara.io',
+  'https://clownfish-app-ymy8k.ondigitalocean.app',
+  'http://localhost:3000'
+];
+
+// Configure CORS - keep it simple
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(null, true); // For development: allow all origins
+      // For production: callback(new Error('Not allowed by CORS'), false);
+    }
+  },
+  credentials: true
+}));
 
 // Apply other middleware
 app.use(helmet({
-  // Disable contentSecurityPolicy for simplicity in development
-  // In production, you might want to configure this properly
   contentSecurityPolicy: false
 }));
 app.use(express.json());
