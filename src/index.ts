@@ -1,7 +1,6 @@
 // src/index.ts
 import express from 'express';
 import mongoose from 'mongoose';
-import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 
@@ -24,24 +23,51 @@ connectDB();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Configure CORS to include your custom domain
-const allowedOrigins = process.env.CORS_ORIGIN ? 
-  process.env.CORS_ORIGIN.split(',') : 
-  [
-    'https://clownfish-app-ymy8k.ondigitalocean.app', 
-    'http://localhost:3000',
-    'https://sri-express.mehara.io'  // Add your custom domain here
+// Custom CORS middleware - most reliable approach
+app.use((req, res, next) => {
+  // Define allowed origins - include both your custom domain and default DigitalOcean domains
+  const allowedOrigins = [
+    'https://sri-express.mehara.io',
+    'https://clownfish-app-ymy8k.ondigitalocean.app',
+    'http://localhost:3000'
   ];
+  
+  const origin = req.headers.origin;
+  
+  // Set CORS headers for all requests
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    // For development or unknown origins
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  
+  // Allow credentials
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  
+  // Allow specific headers
+  res.setHeader('Access-Control-Allow-Headers', 
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  // Allow specific methods
+  res.setHeader('Access-Control-Allow-Methods', 
+    'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  
+  // Handle preflight requests (OPTIONS)
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  // Move to the next middleware
+  next();
+});
 
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+// Apply other middleware
+app.use(helmet({
+  // Disable contentSecurityPolicy for simplicity in development
+  // In production, you might want to configure this properly
+  contentSecurityPolicy: false
 }));
-
-// Other middleware
-app.use(helmet());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
