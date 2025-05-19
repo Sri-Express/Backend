@@ -24,25 +24,23 @@ connectDB();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Configure CORS - UPDATED CODE HERE
+// Configure CORS to include your custom domain
 const allowedOrigins = process.env.CORS_ORIGIN ? 
   process.env.CORS_ORIGIN.split(',') : 
-  ['https://clownfish-app-ymy8k.ondigitalocean.app', 'http://localhost:3000'];
+  [
+    'https://clownfish-app-ymy8k.ondigitalocean.app', 
+    'http://localhost:3000',
+    'https://sri-express.mehara.io'  // Add your custom domain here
+  ];
 
 app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
-  },
-  credentials: true
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Rest of your code remains the same
+// Other middleware
 app.use(helmet());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
