@@ -10,6 +10,7 @@ dotenv.config();
 
 // Import routes
 import authRoutes from './routes/authRoutes';
+import dashboardRoutes from './routes/dashboardRoutes';
 
 // Import middleware
 import { notFound, errorHandler } from './middleware/errorMiddleware';
@@ -61,6 +62,7 @@ app.get('/', (req, res) => {
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Error handling middleware
 app.use(notFound);
