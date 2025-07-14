@@ -5,6 +5,24 @@ import Device from '../models/Device';
 import Trip from '../models/Trip';
 import mongoose from 'mongoose';
 
+// Types for alerts
+interface SystemAlert {
+  id: string;
+  type: 'error' | 'warning' | 'info';
+  category: string;
+  title: string;
+  message: string;
+  device?: {
+    id: string;
+    deviceId: string;
+    vehicleNumber: string;
+  };
+  timestamp: Date;
+  priority: 'high' | 'medium' | 'low';
+}
+
+type AlertPriority = 'high' | 'medium' | 'low';
+
 // @desc    Get system dashboard statistics
 // @route   GET /api/admin/system/stats
 // @access  Private (System Admin)
@@ -64,7 +82,7 @@ export const getSystemStats = async (req: Request, res: Response): Promise<void>
     const errorRate = 0.2;
 
     // Format user statistics by role
-    const userRoleStats = usersByRole.reduce((acc, item) => {
+    const userRoleStats = usersByRole.reduce((acc: Record<string, number>, item) => {
       acc[item._id] = item.count;
       return acc;
     }, {});
@@ -111,6 +129,16 @@ export const getSystemHealth = async (req: Request, res: Response): Promise<void
   try {
     // Database health check
     const dbHealthStart = Date.now();
+    
+    // Check if database connection exists
+    if (!mongoose.connection.db) {
+      res.status(500).json({ 
+        message: 'Database connection not available',
+        status: 'unhealthy'
+      });
+      return;
+    }
+
     await mongoose.connection.db.admin().ping();
     const dbResponseTime = Date.now() - dbHealthStart;
 
@@ -218,8 +246,8 @@ export const getSystemAlerts = async (req: Request, res: Response): Promise<void
       isActive: true
     }).select('deviceId vehicleNumber lastMaintenance');
 
-    // Create alerts array
-    const alerts = [];
+    // Create alerts array with proper typing
+    const alerts: SystemAlert[] = [];
 
     // Add device alerts
     deviceAlerts.forEach(device => {
@@ -231,7 +259,7 @@ export const getSystemAlerts = async (req: Request, res: Response): Promise<void
           title: `Device Alert: ${device.deviceId}`,
           message: message,
           device: {
-            id: device._id,
+            id: String(device._id),
             deviceId: device.deviceId,
             vehicleNumber: device.vehicleNumber
           },
@@ -251,7 +279,7 @@ export const getSystemAlerts = async (req: Request, res: Response): Promise<void
         title: `Device Offline: ${device.deviceId}`,
         message: `Device has been offline for ${hoursOffline} hours`,
         device: {
-          id: device._id,
+          id: String(device._id),
           deviceId: device.deviceId,
           vehicleNumber: device.vehicleNumber
         },
@@ -269,7 +297,7 @@ export const getSystemAlerts = async (req: Request, res: Response): Promise<void
         title: `Device in Maintenance: ${device.deviceId}`,
         message: `Device is currently under maintenance`,
         device: {
-          id: device._id,
+          id: String(device._id),
           deviceId: device.deviceId,
           vehicleNumber: device.vehicleNumber
         },
@@ -279,7 +307,7 @@ export const getSystemAlerts = async (req: Request, res: Response): Promise<void
     });
 
     // Sort alerts by priority and timestamp
-    const priorityOrder = { high: 3, medium: 2, low: 1 };
+    const priorityOrder: Record<AlertPriority, number> = { high: 3, medium: 2, low: 1 };
     alerts.sort((a, b) => {
       const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
       if (priorityDiff !== 0) return priorityDiff;

@@ -34,6 +34,10 @@ export interface IDevice extends Document {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  // Method signatures
+  updateLocation(latitude: number, longitude: number, address: string): Promise<IDevice>;
+  addAlert(message: string): Promise<IDevice>;
+  clearAlerts(): Promise<IDevice>;
 }
 
 const DeviceSchema = new Schema<IDevice>(
@@ -102,7 +106,7 @@ const DeviceSchema = new Schema<IDevice>(
       userId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: function() {
+        required: function(this: IDevice) {
           return this.assignedTo.type !== 'system';
         },
       },
@@ -158,7 +162,7 @@ DeviceSchema.index({ 'assignedTo.userId': 1 });
 DeviceSchema.index({ 'location.latitude': 1, 'location.longitude': 1 });
 
 // Method to update device location
-DeviceSchema.methods.updateLocation = function(latitude: number, longitude: number, address: string) {
+DeviceSchema.methods.updateLocation = function(latitude: number, longitude: number, address: string): Promise<IDevice> {
   this.location = {
     latitude,
     longitude,
@@ -171,14 +175,14 @@ DeviceSchema.methods.updateLocation = function(latitude: number, longitude: numb
 };
 
 // Method to add alert
-DeviceSchema.methods.addAlert = function(message: string) {
+DeviceSchema.methods.addAlert = function(message: string): Promise<IDevice> {
   this.alerts.messages.push(message);
   this.alerts.count = this.alerts.messages.length;
   return this.save();
 };
 
 // Method to clear alerts
-DeviceSchema.methods.clearAlerts = function() {
+DeviceSchema.methods.clearAlerts = function(): Promise<IDevice> {
   this.alerts.messages = [];
   this.alerts.count = 0;
   return this.save();
