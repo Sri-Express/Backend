@@ -1,4 +1,4 @@
-// src/index.ts - CLEAN VERSION (NO DUPLICATES)
+// src/index.ts - FIXED VERSION WITH ALL IMPORTS
 import express from 'express';
 import mongoose from 'mongoose';
 import helmet from 'helmet';
@@ -7,6 +7,15 @@ import cors from 'cors';
 
 // Load environment variables
 dotenv.config();
+
+// Import all models to ensure they're registered
+import User from './models/User';
+import Device from './models/Device';
+import Trip from './models/Trip';
+import Emergency from './models/Emergency';
+import UserActivity from './models/UserActivity';
+// Import Fleet model (create this file if it doesn't exist)
+// import Fleet from './models/Fleet';
 
 // Import routes
 import authRoutes from './routes/authRoutes';
@@ -26,27 +35,11 @@ connectDB();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Define allowed origins
-const allowedOrigins = [
-  'https://sri-express.mehara.io',
-  'https://clownfish-app-ymy8k.ondigitalocean.app',
-  'http://localhost:3000'
-];
-
-// Configure CORS - keep it simple
+// Configure CORS to allow all origins for development
 app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, etc)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(null, true); // For development: allow all origins
-      // For production: callback(new Error('Not allowed by CORS'), false);
-    }
-  },
-  credentials: true
+  origin: true, // Allow all origins in development
+  credentials: true,
+  optionsSuccessStatus: 200
 }));
 
 // Apply other middleware
@@ -56,19 +49,19 @@ app.use(helmet({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 
-// Request logging middleware for development
-if (process.env.NODE_ENV === 'development') {
-  app.use((req, res, next) => {
-    console.log(`${req.method} ${req.path} - ${new Date().toISOString()}`);
-    next();
-  });
-}
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  next();
+});
 
 // Basic route for testing
 app.get('/', (req, res) => {
   res.json({
-    message: 'ශ්‍රී Express API is running',
-    version: '1.0.0',
+    message: 'ශ්‍රී Express API is running successfully!',
+    version: '2.0.0',
+    status: 'operational',
+    timestamp: new Date().toISOString(),
     endpoints: {
       auth: '/api/auth',
       dashboard: '/api/dashboard',
@@ -84,7 +77,17 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     memory: process.memoryUsage(),
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Test endpoint to verify server is working
+app.get('/test', (req, res) => {
+  res.json({
+    message: 'Test endpoint working!',
+    timestamp: new Date().toISOString(),
+    headers: req.headers
   });
 });
 
@@ -124,12 +127,17 @@ process.on('SIGINT', async () => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`MongoDB: ${mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'}`);
-  console.log(`Available endpoints:`);
-  console.log(`  - Health: http://localhost:${PORT}/health`);
-  console.log(`  - Auth: http://localhost:${PORT}/api/auth`);
-  console.log(`  - Dashboard: http://localhost:${PORT}/api/dashboard`);
-  console.log(`  - Admin: http://localhost:${PORT}/api/admin`);
+  console.log('🚀 ========================================');
+  console.log(`🚀 Sri Express Backend Server Started!`);
+  console.log('🚀 ========================================');
+  console.log(`📍 Server: http://localhost:${PORT}`);
+  console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`📍 Database: ${mongoose.connection.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
+  console.log(`📍 Available endpoints:`);
+  console.log(`   - Test: http://localhost:${PORT}/test`);
+  console.log(`   - Health: http://localhost:${PORT}/health`);
+  console.log(`   - Auth: http://localhost:${PORT}/api/auth`);
+  console.log(`   - Dashboard: http://localhost:${PORT}/api/dashboard`);
+  console.log(`   - Admin: http://localhost:${PORT}/api/admin`);
+  console.log('🚀 ========================================');
 });

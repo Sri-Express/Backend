@@ -1,4 +1,4 @@
-// src/routes/adminRoutes.ts - UPDATED WITH REAL FLEET & AI APIS
+// src/routes/adminRoutes.ts - UPDATED WITH REAL FLEET IMPLEMENTATION
 import express from 'express';
 import { requireSystemAdmin } from '../middleware/adminMiddleware';
 
@@ -48,7 +48,7 @@ import {
   getEmergencyTeams
 } from '../controllers/adminEmergencyController';
 
-// Fleet management controllers - ⭐ NEW!
+// Fleet management controllers - ⭐ REAL IMPLEMENTATION!
 import {
   getAllFleets,
   getFleetById,
@@ -63,18 +63,6 @@ import {
   getInspectionsDue,
   getComplianceIssues
 } from '../controllers/adminFleetController';
-
-// AI management controllers - ⭐ NEW!
-import {
-  getAISystemOverview,
-  getAIModule,
-  toggleAIModule,
-  startTraining,
-  getTrainingStatus,
-  getAllTrainingJobs,
-  updateModuleConfig,
-  getAILogs
-} from '../controllers/adminAIController';
 
 const router = express.Router();
 
@@ -252,26 +240,126 @@ router.put('/fleet/:id/reactivate', reactivateFleet);
 router.delete('/fleet/:id', deleteFleet);
 
 // ============================
-// AI MODULE ROUTES - ⭐ REAL IMPLEMENTATION!
+// AI MODULE ROUTES - MOCK FOR NOW (CAN BE MADE REAL LATER)
 // ============================
 
-// Get AI system overview and statistics
-router.get('/ai', getAISystemOverview);
+// Get AI system overview
+router.get('/ai', async (req, res) => {
+  try {
+    res.json({
+      status: 'online',
+      modules: [
+        {
+          id: 'arrival-predictor',
+          name: 'Arrival Time Predictor',
+          description: 'Predicts bus/train arrival times using traffic and historical data',
+          status: 'active',
+          accuracy: 87.5,
+          lastTrained: '2025-01-15T10:30:00Z',
+          version: '2.1.3',
+          type: 'prediction',
+          config: {
+            autoRetrain: true,
+            confidenceThreshold: 0.85,
+            trainingInterval: 24,
+            dataPoints: 10000
+          },
+          performance: {
+            totalPredictions: 45230,
+            successfulPredictions: 39576,
+            avgResponseTime: 120,
+            lastPrediction: new Date().toISOString()
+          },
+          resources: {
+            cpuUsage: 15.2,
+            memoryUsage: 256,
+            gpuUsage: 45.8
+          }
+        },
+        {
+          id: 'route-optimizer',
+          name: 'Route Optimizer',
+          description: 'Optimizes routes based on real-time traffic and passenger demand',
+          status: 'inactive',
+          accuracy: 92.1,
+          lastTrained: '2025-01-10T14:20:00Z',
+          version: '1.8.2',
+          type: 'optimization',
+          config: {
+            autoRetrain: false,
+            confidenceThreshold: 0.9,
+            trainingInterval: 48,
+            dataPoints: 8500
+          },
+          performance: {
+            totalPredictions: 12450,
+            successfulPredictions: 11467,
+            avgResponseTime: 85,
+            lastPrediction: new Date(Date.now() - 86400000).toISOString()
+          },
+          resources: {
+            cpuUsage: 0,
+            memoryUsage: 0
+          }
+        }
+      ],
+      stats: {
+        totalModules: 2,
+        activeModules: 1,
+        trainingModules: 0,
+        totalPredictions: 57680,
+        averageAccuracy: 89.8,
+        systemCpuUsage: 15.2,
+        systemMemoryUsage: 256,
+        systemGpuUsage: 45.8,
+        dailyPredictions: 5768,
+        errorRate: 1.2
+      },
+      lastUpdated: new Date()
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
-// Get all training jobs
-router.get('/ai/training', getAllTrainingJobs);
+// Toggle AI module
+router.post('/ai/:moduleId/toggle', async (req, res) => {
+  try {
+    const { moduleId } = req.params;
+    const { action } = req.body;
+    
+    res.json({
+      message: `Module ${action}ed successfully`,
+      module: {
+        id: moduleId,
+        status: action === 'start' ? 'active' : 'inactive',
+        updatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
-// Get AI system logs
-router.get('/ai/logs', getAILogs);
-
-// SPECIFIC AI MODULE ROUTES
-router.get('/ai/:moduleId', getAIModule);
-router.post('/ai/:moduleId/toggle', toggleAIModule);
-router.post('/ai/:moduleId/train', startTraining);
-router.put('/ai/:moduleId/config', updateModuleConfig);
-
-// SPECIFIC TRAINING JOB ROUTES
-router.get('/ai/training/:jobId', getTrainingStatus);
+// Start AI training
+router.post('/ai/:moduleId/train', async (req, res) => {
+  try {
+    const { moduleId } = req.params;
+    
+    res.json({
+      message: 'Training started successfully',
+      trainingJob: {
+        id: `train_${Date.now()}`,
+        moduleId,
+        status: 'queued',
+        progress: 0,
+        startTime: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
 // ============================
 // UTILITY ROUTES
@@ -295,8 +383,8 @@ router.post('/test/activity', async (req, res) => {
 router.get('/docs', (req, res) => {
   res.json({
     message: 'Sri Express Admin API Documentation',
-    version: '2.0.0', // Updated version!
-    status: 'Complete - All APIs Implemented', // Updated status!
+    version: '2.0.0',
+    status: 'Fleet APIs Fully Implemented!', // ⭐ UPDATED STATUS!
     endpoints: {
       users: {
         'GET /users': 'Get all users with pagination',
@@ -318,22 +406,19 @@ router.get('/docs', (req, res) => {
         'PUT /devices/:id': 'Update device',
         'DELETE /devices/:id': 'Delete device'
       },
-      fleet: { // ⭐ NEW SECTION!
-        'GET /fleet': 'Get all fleet applications',
-        'GET /fleet/stats': 'Get fleet statistics',
-        'POST /fleet': 'Create fleet application',
-        'GET /fleet/:id': 'Get fleet by ID',
-        'PUT /fleet/:id/approve': 'Approve fleet application',
-        'PUT /fleet/:id/reject': 'Reject fleet application',
-        'PUT /fleet/:id/suspend': 'Suspend fleet operations'
+      fleet: { // ⭐ REAL IMPLEMENTATION!
+        'GET /fleet': 'Get all fleet applications with real database',
+        'GET /fleet/stats': 'Get fleet statistics from database',
+        'POST /fleet': 'Create fleet application in database',
+        'GET /fleet/:id': 'Get fleet by ID from database',
+        'PUT /fleet/:id/approve': 'Approve fleet with database update',
+        'PUT /fleet/:id/reject': 'Reject fleet with database update',
+        'PUT /fleet/:id/suspend': 'Suspend fleet in database'
       },
-      ai: { // ⭐ NEW SECTION!
-        'GET /ai': 'Get AI system overview',
-        'GET /ai/:moduleId': 'Get AI module details',
-        'POST /ai/:moduleId/toggle': 'Start/stop AI module',
-        'POST /ai/:moduleId/train': 'Start module training',
-        'GET /ai/training': 'Get all training jobs',
-        'GET /ai/training/:jobId': 'Get training job status'
+      ai: {
+        'GET /ai': 'Get AI system overview (mock)',
+        'POST /ai/:moduleId/toggle': 'Start/stop AI module (mock)',
+        'POST /ai/:moduleId/train': 'Start module training (mock)'
       }
     }
   });

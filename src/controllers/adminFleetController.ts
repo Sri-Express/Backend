@@ -1,4 +1,4 @@
-// src/controllers/adminFleetController.ts
+// src/controllers/adminFleetController.ts - REAL IMPLEMENTATION
 import { Request, Response } from 'express';
 import Fleet from '../models/Fleet';
 import User from '../models/User';
@@ -79,7 +79,16 @@ export const getAllFleets = async (req: Request, res: Response): Promise<void> =
         return acc;
       }, {}),
       totalVehicles: stats.reduce((sum, item) => sum + item.totalVehicles, 0),
-      totalActiveVehicles: stats.reduce((sum, item) => sum + item.activeVehicles, 0)
+      totalActiveVehicles: stats.reduce((sum, item) => sum + item.activeVehicles, 0),
+      pendingApprovals: stats.find(s => s._id === 'pending')?.count || 0,
+      approvedFleets: stats.find(s => s._id === 'approved')?.count || 0,
+      rejectedApplications: stats.find(s => s._id === 'rejected')?.count || 0,
+      activeVehicles: stats.reduce((sum, item) => sum + item.activeVehicles, 0),
+      complianceIssues: await Fleet.countDocuments({
+        status: { $in: ['approved', 'pending'] },
+        complianceScore: { $lt: 70 },
+        isActive: true
+      })
     };
 
     res.json({
@@ -292,14 +301,6 @@ export const approveFleet = async (req: Request, res: Response): Promise<void> =
     if (fleet.status !== 'pending') {
       res.status(400).json({ 
         message: `Fleet cannot be approved. Current status: ${fleet.status}` 
-      });
-      return;
-    }
-
-    // Check compliance score
-    if (fleet.complianceScore < 70) {
-      res.status(400).json({ 
-        message: `Fleet compliance score (${fleet.complianceScore}%) is below minimum requirement (70%)` 
       });
       return;
     }
@@ -626,7 +627,11 @@ export const getFleetStats = async (req: Request, res: Response): Promise<void> 
 // @access  Private (System Admin)
 export const getInspectionsDue = async (req: Request, res: Response): Promise<void> => {
   try {
-    const fleets = await Fleet.getInspectionDue();
+    const fleets = await Fleet.find({
+      status: 'approved',
+      nextInspectionDue: { $lte: new Date() },
+      isActive: true
+    }).sort({ nextInspectionDue: 1 });
     
     res.json({
       fleets,
@@ -646,7 +651,11 @@ export const getInspectionsDue = async (req: Request, res: Response): Promise<vo
 // @access  Private (System Admin)
 export const getComplianceIssues = async (req: Request, res: Response): Promise<void> => {
   try {
-    const fleets = await Fleet.getComplianceIssues();
+    const fleets = await Fleet.find({
+      status: { $in: ['approved', 'pending'] },
+      complianceScore: { $lt: 70 },
+      isActive: true
+    }).sort({ complianceScore: 1 });
     
     res.json({
       fleets,
