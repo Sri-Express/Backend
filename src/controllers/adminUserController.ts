@@ -1,7 +1,9 @@
-// src/controllers/adminUserController.ts
+// src/controllers/adminUserController.ts - FIXED WITHOUT STATIC METHODS
 import { Request, Response } from 'express';
 import User from '../models/User';
+import UserActivity from '../models/UserActivity';
 import bcrypt from 'bcrypt';
+import mongoose from 'mongoose';
 
 // @desc    Get all users with pagination and filtering
 // @route   GET /api/admin/users
@@ -370,4 +372,319 @@ export const getUserStats = async (req: Request, res: Response): Promise<void> =
       error: error instanceof Error ? error.message : 'Unknown error' 
     });
   }
+};
+
+// @desc    Get individual user statistics
+// @route   GET /api/admin/users/:id/stats
+// @access  Private (System Admin)
+export const getUserStatistics = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    // Check if user exists
+    const user = await User.findById(id);
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    // Get activity statistics using direct queries instead of static method
+    const totalActivities = await UserActivity.countDocuments({ userId: id });
+    const loginCount = await UserActivity.countDocuments({ 
+      userId: id, 
+      action: 'login' 
+    });
+    
+    // Get last 30 days activity
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const recentActivities = await UserActivity.countDocuments({
+      userId: id,
+      timestamp: { $gte: thirtyDaysAgo }
+    });
+
+    // Mock role-specific statistics (you can enhance these with real data)
+    let roleSpecificStats: Record<string, any> = {};
+
+    switch (user.role) {
+      case 'client':
+        roleSpecificStats = {
+          tripsBooked: Math.floor(Math.random() * 50) + 5,
+          completedTrips: Math.floor(Math.random() * 45) + 3,
+          cancelledTrips: Math.floor(Math.random() * 5),
+          upcomingTrips: Math.floor(Math.random() * 3)
+        };
+        break;
+      case 'route_admin':
+      case 'company_admin':
+        roleSpecificStats = {
+          devicesManaged: Math.floor(Math.random() * 20) + 5,
+          onlineDevices: Math.floor(Math.random() * 15) + 3,
+          offlineDevices: Math.floor(Math.random() * 5),
+          maintenanceDevices: Math.floor(Math.random() * 3)
+        };
+        break;
+      case 'customer_service':
+        roleSpecificStats = {
+          ticketsHandled: Math.floor(Math.random() * 200) + 50,
+          resolvedTickets: Math.floor(Math.random() * 180) + 40,
+          averageResponseTime: Math.floor(Math.random() * 60) + 15
+        };
+        break;
+      case 'system_admin':
+        roleSpecificStats = {
+          usersManaged: await User.countDocuments(),
+          devicesOverseeing: Math.floor(Math.random() * 100) + 20,
+          systemAlerts: Math.floor(Math.random() * 10) + 2
+        };
+        break;
+    }
+
+    // Get last activity date
+    const lastActivity = await UserActivity.findOne(
+      { userId: id },
+      {},
+      { sort: { timestamp: -1 } }
+    );
+
+    // Mock trends (enhance with real calculation)
+    const trends = {
+      loginTrend: Math.floor(Math.random() * 40) - 20, // -20 to +20
+      activityTrend: Math.floor(Math.random() * 60) - 30 // -30 to +30
+    };
+
+    const statistics = {
+      userId: id,
+      role: user.role,
+      accountCreated: user.createdAt,
+      lastLogin: user.lastLogin,
+      isActive: user.isActive,
+      totalLogins: loginCount,
+      totalActivities,
+      recentActivities,
+      lastActiveDate: lastActivity?.timestamp || user.lastLogin || user.updatedAt,
+      averageSessionsPerDay: Math.round((loginCount / 30) * 10) / 10, // Mock calculation
+      activityByCategory: {
+        auth: Math.floor(totalActivities * 0.3),
+        profile: Math.floor(totalActivities * 0.1),
+        device: Math.floor(totalActivities * 0.4),
+        trip: Math.floor(totalActivities * 0.1),
+        system: Math.floor(totalActivities * 0.1)
+      },
+      ...roleSpecificStats,
+      failedLoginAttempts: Math.floor(Math.random() * 5), // Mock data
+      trends
+    };
+
+    res.json(statistics);
+  } catch (error) {
+    console.error('Get user statistics error:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+};
+
+// @desc    Get user activity log
+// @route   GET /api/admin/users/:id/activity
+// @access  Private (System Admin)
+export const getUserActivity = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { 
+      page = 1, 
+      limit = 20, 
+      category = 'all',
+      action = 'all',
+      startDate,
+      endDate
+    } = req.query;
+
+    // Check if user exists
+    const user = await User.findById(id);
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    // Build query
+    let query: any = { userId: new mongoose.Types.ObjectId(id) };
+
+    // Filter by category
+    if (category !== 'all') {
+      query.category = category;
+    }
+
+    // Filter by action
+    if (action !== 'all') {
+      query.action = action;
+    }
+
+    // Filter by date range
+    if (startDate || endDate) {
+      query.timestamp = {};
+      if (startDate) {
+        query.timestamp.$gte = new Date(startDate as string);
+      }
+      if (endDate) {
+        query.timestamp.$lte = new Date(endDate as string);
+      }
+    }
+
+    // Calculate pagination
+    const pageNumber = parseInt(page as string);
+    const pageSize = parseInt(limit as string);
+    const skip = (pageNumber - 1) * pageSize;
+
+    // Get activities with pagination
+    const activities = await UserActivity.find(query)
+      .sort({ timestamp: -1 })
+      .skip(skip)
+      .limit(pageSize)
+      .lean();
+
+    // Get total count for pagination
+    const totalActivities = await UserActivity.countDocuments(query);
+
+    // Get activity summary
+    const activitySummary = await UserActivity.aggregate([
+      { $match: { userId: new mongoose.Types.ObjectId(id) } },
+      {
+        $group: {
+          _id: '$category',
+          count: { $sum: 1 },
+          lastActivity: { $max: '$timestamp' }
+        }
+      }
+    ]);
+
+    // Get unique actions for this user
+    const uniqueActions = await UserActivity.distinct('action', { userId: id });
+
+    // Format activities for frontend
+    const formattedActivities = activities.map(activity => ({
+      id: activity._id,
+      action: activity.action,
+      description: activity.description,
+      category: activity.category,
+      severity: activity.severity,
+      timestamp: activity.timestamp,
+      ipAddress: activity.ipAddress,
+      userAgent: activity.userAgent,
+      metadata: activity.metadata
+    }));
+
+    res.json({
+      activities: formattedActivities,
+      pagination: {
+        currentPage: pageNumber,
+        totalPages: Math.ceil(totalActivities / pageSize),
+        totalActivities,
+        hasNext: pageNumber < Math.ceil(totalActivities / pageSize),
+        hasPrev: pageNumber > 1
+      },
+      summary: {
+        totalActivities,
+        categorySummary: activitySummary.reduce((acc: Record<string, any>, item) => {
+          acc[item._id] = {
+            count: item.count,
+            lastActivity: item.lastActivity
+          };
+          return acc;
+        }, {}),
+        availableActions: uniqueActions,
+        availableCategories: ['auth', 'profile', 'device', 'trip', 'system', 'other']
+      }
+    });
+  } catch (error) {
+    console.error('Get user activity error:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+};
+
+// @desc    Get user activity timeline (simplified for dashboard widgets)
+// @route   GET /api/admin/users/:id/timeline
+// @access  Private (System Admin)
+export const getUserTimeline = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { limit = 10 } = req.query;
+
+    // Check if user exists
+    const user = await User.findById(id);
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    // Get recent activities for timeline
+    const recentActivities = await UserActivity.find({ userId: id })
+      .sort({ timestamp: -1 })
+      .limit(parseInt(limit as string))
+      .select('action description timestamp category severity metadata')
+      .lean();
+
+    // Format for timeline display
+    const timeline = recentActivities.map(activity => ({
+      id: activity._id,
+      action: activity.action,
+      description: activity.description,
+      timestamp: activity.timestamp,
+      category: activity.category,
+      severity: activity.severity,
+      icon: getActivityIcon(activity.action),
+      color: getCategoryColor(activity.category),
+      metadata: activity.metadata
+    }));
+
+    res.json({ timeline });
+  } catch (error) {
+    console.error('Get user timeline error:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+};
+
+// Helper function to get activity icon
+const getActivityIcon = (action: string): string => {
+  const iconMap: Record<string, string> = {
+    'login': 'login',
+    'logout': 'logout',
+    'password_change': 'key',
+    'profile_update': 'user',
+    'user_created': 'user-plus',
+    'user_updated': 'user-edit',
+    'user_deleted': 'user-minus',
+    'device_created': 'device-plus',
+    'device_updated': 'device-edit',
+    'device_deleted': 'device-minus',
+    'trip_booking': 'map',
+    'users_list_view': 'list',
+    'devices_list_view': 'list',
+    'user_details_view': 'eye',
+    'device_details_view': 'eye'
+  };
+
+  return iconMap[action] || 'activity';
+};
+
+// Helper function to get category color
+const getCategoryColor = (category: string): string => {
+  const colorMap: Record<string, string> = {
+    'auth': 'blue',
+    'profile': 'green',
+    'device': 'orange',
+    'trip': 'cyan',
+    'system': 'red',
+    'other': 'gray'
+  };
+
+  return colorMap[category] || 'gray';
 };

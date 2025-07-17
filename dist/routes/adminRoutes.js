@@ -12,6 +12,8 @@ const adminUserController_1 = require("../controllers/adminUserController");
 const adminDeviceController_1 = require("../controllers/adminDeviceController");
 // System management controllers
 const adminSystemController_1 = require("../controllers/adminSystemController");
+// Emergency management controllers
+const adminEmergencyController_1 = require("../controllers/adminEmergencyController");
 const router = express_1.default.Router();
 // All admin routes require system admin privileges
 router.use(adminMiddleware_1.requireSystemAdmin);
@@ -67,6 +69,21 @@ router.get('/system/analytics', adminSystemController_1.getSystemAnalytics);
 // Update system settings
 router.put('/system/settings', adminSystemController_1.updateSystemSettings);
 // ============================
+// EMERGENCY MANAGEMENT ROUTES
+// ============================
+// Get emergency dashboard data
+router.get('/emergency', adminEmergencyController_1.getEmergencyDashboard);
+// Create emergency alert
+router.post('/emergency/alert', adminEmergencyController_1.createEmergencyAlert);
+// Get all incidents with pagination and filtering
+router.get('/emergency/incidents', adminEmergencyController_1.getAllIncidents);
+// Resolve emergency incident
+router.put('/emergency/:id/resolve', adminEmergencyController_1.resolveEmergency);
+// Send system-wide emergency broadcast
+router.post('/emergency/broadcast', adminEmergencyController_1.sendEmergencyBroadcast);
+// Get emergency response teams
+router.get('/emergency/teams', adminEmergencyController_1.getEmergencyTeams);
+// ============================
 // FLEET MANAGEMENT ROUTES (Placeholder)
 // ============================
 // Get fleet registrations
@@ -117,23 +134,6 @@ router.get('/ai/config', (req, res) => {
 router.put('/ai/config', (req, res) => {
     res.json({
         message: 'AI configuration update API not implemented yet'
-    });
-});
-// ============================
-// EMERGENCY ROUTES (Placeholder)
-// ============================
-// Get emergency status
-router.get('/emergency', (req, res) => {
-    res.json({
-        status: 'normal',
-        incidents: [],
-        message: 'Emergency management API not implemented yet'
-    });
-});
-// Trigger emergency alert
-router.post('/emergency/alert', (req, res) => {
-    res.json({
-        message: 'Emergency alert API not implemented yet'
     });
 });
 exports.default = router;
