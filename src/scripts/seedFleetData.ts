@@ -1,25 +1,30 @@
-// src/scripts/seedFleetData.ts - CREATE THIS FILE TO POPULATE DATABASE
+// src/scripts/seedFleetData.ts - CORRECTED VERSION
+
 import mongoose from 'mongoose';
+import dotenv from 'dotenv';
 import Fleet from '../models/Fleet';
 import connectDB from '../config/db';
+
+dotenv.config();
 
 const seedFleetData = async () => {
   try {
     // Connect to database
     await connectDB();
+    console.log('✅ Successfully connected to MongoDB');
 
     // Clear existing fleet data
     await Fleet.deleteMany({});
     console.log('✅ Cleared existing fleet data');
 
-    // Sample fleet data
+    // Sample fleet data with corrected phone numbers
     const fleetData = [
       {
         companyName: 'Colombo Express Transport',
         registrationNumber: 'REG-2024-001',
         contactPerson: 'Samantha Perera',
         email: 'samantha@colomboexpress.lk',
-        phone: '+94 11 234 5678',
+        phone: '+94112345678', // Corrected
         address: 'No. 123, Galle Road, Colombo 03',
         status: 'pending',
         applicationDate: new Date('2025-01-15T09:30:00Z'),
@@ -35,9 +40,9 @@ const seedFleetData = async () => {
         complianceScore: 85,
         notes: 'Strong application, missing some vehicle registrations',
         financialInfo: {
-          annualRevenue: 50000000, // 50M LKR
-          insuranceAmount: 10000000, // 10M LKR
-          bondAmount: 5000000 // 5M LKR
+          annualRevenue: 50000000,
+          insuranceAmount: 10000000,
+          bondAmount: 5000000
         },
         operationalInfo: {
           yearsInOperation: 8,
@@ -51,7 +56,7 @@ const seedFleetData = async () => {
         registrationNumber: 'REG-2024-002',
         contactPerson: 'Kamal Silva',
         email: 'kamal@southerntrans.lk',
-        phone: '+94 91 234 5678',
+        phone: '+94912345678', // Corrected
         address: 'No. 45, Main Street, Matara',
         status: 'approved',
         applicationDate: new Date('2025-01-10T14:20:00Z'),
@@ -85,7 +90,7 @@ const seedFleetData = async () => {
         registrationNumber: 'REG-2024-003',
         contactPerson: 'Priya Wickramasinghe',
         email: 'priya@hillcountry.lk',
-        phone: '+94 81 234 5678',
+        phone: '+94812345678', // Corrected
         address: 'No. 67, Temple Road, Kandy',
         status: 'rejected',
         applicationDate: new Date('2025-01-08T16:45:00Z'),
@@ -118,7 +123,7 @@ const seedFleetData = async () => {
         registrationNumber: 'REG-2024-004',
         contactPerson: 'Rajesh Kumar',
         email: 'rajesh@northernexpress.lk',
-        phone: '+94 21 234 5678',
+        phone: '+94212345678', // Corrected
         address: 'No. 89, Hospital Road, Jaffna',
         status: 'pending',
         applicationDate: new Date('2025-01-16T08:15:00Z'),
@@ -150,7 +155,7 @@ const seedFleetData = async () => {
         registrationNumber: 'REG-2024-005',
         contactPerson: 'Nuwan Fernando',
         email: 'nuwan@easternroute.lk',
-        phone: '+94 65 234 5678',
+        phone: '+94652345678', // Corrected
         address: 'No. 156, Clock Tower Road, Batticaloa',
         status: 'approved',
         applicationDate: new Date('2025-01-05T11:45:00Z'),
@@ -184,7 +189,7 @@ const seedFleetData = async () => {
         registrationNumber: 'REG-2024-006',
         contactPerson: 'Malika Rathnayake',
         email: 'malika@centralbus.lk',
-        phone: '+94 81 345 6789',
+        phone: '+94813456789', // Corrected
         address: 'No. 234, Peradeniya Road, Kandy',
         status: 'suspended',
         applicationDate: new Date('2024-12-20T10:30:00Z'),
@@ -218,7 +223,7 @@ const seedFleetData = async () => {
         registrationNumber: 'REG-2024-007',
         contactPerson: 'Lakshitha Jayawardena',
         email: 'lakshitha@metrocity.lk',
-        phone: '+94 11 987 6543',
+        phone: '+94119876543', // Corrected
         address: 'No. 78, Union Place, Colombo 02',
         status: 'pending',
         applicationDate: new Date('2025-01-17T15:20:00Z'),
@@ -250,7 +255,7 @@ const seedFleetData = async () => {
         registrationNumber: 'REG-2024-008',
         contactPerson: 'Chaminda Perera',
         email: 'chaminda@uvaexpress.lk',
-        phone: '+94 55 234 5678',
+        phone: '+94552345678', // Corrected
         address: 'No. 45, Badulla Road, Monaragala',
         status: 'approved',
         applicationDate: new Date('2025-01-02T08:00:00Z'),

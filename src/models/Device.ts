@@ -34,7 +34,6 @@ export interface IDevice extends Document {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
-  // Method signatures
   updateLocation(latitude: number, longitude: number, address: string): Promise<IDevice>;
   addAlert(message: string): Promise<IDevice>;
   clearAlerts(): Promise<IDevice>;
@@ -155,7 +154,7 @@ const DeviceSchema = new Schema<IDevice>(
 );
 
 // Index for better query performance
-DeviceSchema.index({ deviceId: 1 });
+// DeviceSchema.index({ deviceId: 1 }); // <-- THIS LINE IS REMOVED (unique:true handles it)
 DeviceSchema.index({ vehicleNumber: 1 });
 DeviceSchema.index({ status: 1 });
 DeviceSchema.index({ 'assignedTo.userId': 1 });

@@ -89,7 +89,6 @@ export interface IEmergency extends Document {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
-  // Methods
   addTimelineEntry(action: string, performedBy: any, details: string): Promise<IEmergency>;
   escalate(): Promise<IEmergency>;
   assignTeam(teamData: any): Promise<IEmergency>;
@@ -295,7 +294,7 @@ const EmergencySchema = new Schema<IEmergency>(
 );
 
 // Indexes for better query performance
-EmergencySchema.index({ incidentId: 1 });
+// EmergencySchema.index({ incidentId: 1 }); // <-- THIS LINE IS REMOVED (unique:true handles it)
 EmergencySchema.index({ status: 1 });
 EmergencySchema.index({ priority: 1 });
 EmergencySchema.index({ type: 1 });
@@ -333,7 +332,6 @@ EmergencySchema.methods.escalate = function(): Promise<IEmergency> {
   if (this.escalationLevel < 5) {
     this.escalationLevel += 1;
     
-    // Auto-upgrade priority based on escalation
     if (this.escalationLevel >= 4) {
       this.priority = 'critical';
       this.severity = 'critical';

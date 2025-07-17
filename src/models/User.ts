@@ -109,7 +109,7 @@ const UserSchema = new Schema<IUser>(
 );
 
 // Indexes for better query performance
-UserSchema.index({ email: 1 });
+// UserSchema.index({ email: 1 }); // <-- THIS LINE IS REMOVED (unique:true handles it)
 UserSchema.index({ role: 1 });
 UserSchema.index({ isActive: 1 });
 UserSchema.index({ createdAt: 1 });
@@ -148,22 +148,17 @@ UserSchema.methods.comparePassword = async function (candidatePassword: string):
 
 // Generate OTP for password reset
 UserSchema.methods.getResetPasswordOtp = function (): string {
-  // Generate a 6-digit numeric OTP
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   console.log(`[getResetPasswordOtp] Generated OTP for ${this.email}: ${otp}`);
   
-  // Hash OTP before saving to database for security
   const hashedOtp = bcrypt.hashSync(otp, 10);
   console.log(`[getResetPasswordOtp] Hashed OTP stored in DB for ${this.email}`);
   
-  // Store the hashed OTP and set expiry
   this.resetPasswordToken = hashedOtp;
-  
-  // Set expire time - 1 hour
   this.resetPasswordExpire = new Date(Date.now() + 60 * 60 * 1000);
   console.log(`[getResetPasswordOtp] OTP will expire at ${this.resetPasswordExpire}`);
   
-  return otp; // Return the plain OTP for sending via email
+  return otp;
 };
 
 // Method to update last login and increment login count
@@ -232,17 +227,14 @@ UserSchema.methods.removePermission = function(permission: string): Promise<IUse
 // Method to get user's full statistics
 UserSchema.methods.getFullStats = async function() {
   try {
-    // Import UserActivity here to avoid circular dependency
     const UserActivity = mongoose.model('UserActivity');
     
-    // Get activity statistics
     const totalActivities = await UserActivity.countDocuments({ userId: this._id });
     const loginActivities = await UserActivity.countDocuments({ 
       userId: this._id, 
       action: 'login' 
     });
 
-    // Get recent activity (last 30 days)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
@@ -251,7 +243,6 @@ UserSchema.methods.getFullStats = async function() {
       timestamp: { $gte: thirtyDaysAgo }
     });
 
-    // Get activity breakdown by category
     const activityByCategory = await UserActivity.aggregate([
       { $match: { userId: this._id } },
       {

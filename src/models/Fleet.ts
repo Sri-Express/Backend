@@ -45,7 +45,6 @@ export interface IFleet extends Document {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
-  // Method signatures
   approve(approvedBy: mongoose.Types.ObjectId, notes?: string): Promise<IFleet>;
   reject(rejectedBy: mongoose.Types.ObjectId, reason: string): Promise<IFleet>;
   suspend(suspendedBy: mongoose.Types.ObjectId, reason: string): Promise<IFleet>;
@@ -239,7 +238,7 @@ const FleetSchema = new Schema<IFleet>(
 );
 
 // Indexes for better query performance
-FleetSchema.index({ registrationNumber: 1 });
+// FleetSchema.index({ registrationNumber: 1 }); // <-- THIS LINE IS REMOVED (unique:true handles it)
 FleetSchema.index({ status: 1 });
 FleetSchema.index({ email: 1 });
 FleetSchema.index({ companyName: 1 });
@@ -265,7 +264,6 @@ FleetSchema.virtual('complianceStatus').get(function() {
 FleetSchema.methods.calculateComplianceScore = function(): number {
   let score = 0;
   
-  // Document completion (40% of score)
   const docs = this.documents;
   const docScore = (
     (docs.businessLicense ? 10 : 0) +
@@ -275,24 +273,20 @@ FleetSchema.methods.calculateComplianceScore = function(): number {
   );
   score += docScore;
   
-  // Vehicle ratio (20% of score)
   if (this.totalVehicles > 0) {
     const vehicleRatio = this.activeVehicles / this.totalVehicles;
     score += vehicleRatio * 20;
   }
   
-  // Operating experience (20% of score)
   if (this.operationalInfo?.yearsInOperation) {
     const experienceScore = Math.min(this.operationalInfo.yearsInOperation / 10 * 20, 20);
     score += experienceScore;
   }
   
-  // Safety rating (10% of score)
   if (this.operationalInfo?.safetyRating) {
     score += (this.operationalInfo.safetyRating / 5) * 10;
   }
   
-  // Recent inspection (10% of score)
   if (this.lastInspection) {
     const daysSinceInspection = Math.floor((Date.now() - this.lastInspection.getTime()) / (1000 * 60 * 60 * 24));
     if (daysSinceInspection <= 365) {
@@ -324,7 +318,6 @@ FleetSchema.methods.approve = function(approvedBy: mongoose.Types.ObjectId, note
     this.notes = notes;
   }
   
-  // Set next inspection due date (1 year from approval)
   this.nextInspectionDue = new Date();
   this.nextInspectionDue.setFullYear(this.nextInspectionDue.getFullYear() + 1);
   
@@ -349,7 +342,7 @@ FleetSchema.methods.suspend = function(suspendedBy: mongoose.Types.ObjectId, rea
   this.suspensionDate = new Date();
   this.suspendedBy = suspendedBy;
   this.notes = reason;
-  this.activeVehicles = 0; // Suspend all vehicles
+  this.activeVehicles = 0;
   
   return this.save();
 };
@@ -364,12 +357,10 @@ FleetSchema.pre('save', function(next) {
 
 // Pre-save middleware to validate business rules
 FleetSchema.pre('save', function(next) {
-  // Ensure approved fleets have minimum compliance score
   if (this.status === 'approved' && this.complianceScore < 70) {
     return next(new Error('Fleet must have a compliance score of at least 70% to be approved'));
   }
   
-  // Ensure rejected fleets have a rejection reason
   if (this.status === 'rejected' && !this.rejectionReason) {
     return next(new Error('Rejection reason is required for rejected fleets'));
   }

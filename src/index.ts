@@ -1,4 +1,4 @@
-// src/index.ts - FIXED VERSION WITH ALL IMPORTS
+// src/index.ts - FIXED VERSION
 import express from 'express';
 import mongoose from 'mongoose';
 import helmet from 'helmet';
@@ -9,13 +9,12 @@ import cors from 'cors';
 dotenv.config();
 
 // Import all models to ensure they're registered
-import User from './models/User';
-import Device from './models/Device';
-import Trip from './models/Trip';
-import Emergency from './models/Emergency';
-import UserActivity from './models/UserActivity';
-// Import Fleet model (create this file if it doesn't exist)
-// import Fleet from './models/Fleet';
+import './models/User';
+import './models/Device';
+import './models/Trip';
+import './models/Emergency';
+import './models/UserActivity';
+import './models/Fleet';
 
 // Import routes
 import authRoutes from './routes/authRoutes';
@@ -27,9 +26,6 @@ import { notFound, errorHandler } from './middleware/errorMiddleware';
 
 // Import DB connection
 import connectDB from './config/db';
-
-// Connect to MongoDB
-connectDB();
 
 // Initialize express app
 const app = express();
@@ -125,19 +121,35 @@ process.on('SIGINT', async () => {
   }
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log('🚀 ========================================');
-  console.log(`🚀 Sri Express Backend Server Started!`);
-  console.log('🚀 ========================================');
-  console.log(`📍 Server: http://localhost:${PORT}`);
-  console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`📍 Database: ${mongoose.connection.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
-  console.log(`📍 Available endpoints:`);
-  console.log(`   - Test: http://localhost:${PORT}/test`);
-  console.log(`   - Health: http://localhost:${PORT}/health`);
-  console.log(`   - Auth: http://localhost:${PORT}/api/auth`);
-  console.log(`   - Dashboard: http://localhost:${PORT}/api/dashboard`);
-  console.log(`   - Admin: http://localhost:${PORT}/api/admin`);
-  console.log('🚀 ========================================');
-});
+// --- CORRECTED SERVER STARTUP ---
+const startServer = async () => {
+  try {
+    // Connect to MongoDB and wait for it to finish
+    await connectDB();
+
+    // Now that the DB is connected, start the server
+    app.listen(PORT, () => {
+      console.log('🚀 ========================================');
+      console.log(`🚀 Sri Express Backend Server Started!`);
+      console.log('🚀 ========================================');
+      console.log(`📍 Server: http://localhost:${PORT}`);
+      console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
+      // This will now correctly show "Connected"
+      console.log(`📍 Database: ${mongoose.connection.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
+      console.log(`📍 Available endpoints:`);
+      console.log(`   - Test: http://localhost:${PORT}/test`);
+      console.log(`   - Health: http://localhost:${PORT}/health`);
+      console.log(`   - Auth: http://localhost:${PORT}/api/auth`);
+      console.log(`   - Dashboard: http://localhost:${PORT}/api/dashboard`);
+      console.log(`   - Admin: http://localhost:${PORT}/api/admin`);
+      console.log('🚀 ========================================');
+    });
+
+  } catch (error) {
+    console.error("❌ Failed to connect to MongoDB", error);
+    process.exit(1); // Exit the process with an error code
+  }
+};
+
+// Call the function to start the server
+startServer();
