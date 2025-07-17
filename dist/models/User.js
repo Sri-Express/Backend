@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-// src/models/User.ts (improved OTP generation)
+// src/models/User.ts
 const mongoose_1 = __importStar(require("mongoose"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const UserSchema = new mongoose_1.Schema({
@@ -63,11 +63,39 @@ const UserSchema = new mongoose_1.Schema({
         enum: ['client', 'customer_service', 'route_admin', 'company_admin', 'system_admin'],
         default: 'client',
     },
+    phone: {
+        type: String,
+        trim: true,
+    },
+    department: {
+        type: String,
+        trim: true,
+    },
+    company: {
+        type: String,
+        trim: true,
+    },
+    permissions: [{
+            type: String,
+            trim: true,
+        }],
+    isActive: {
+        type: Boolean,
+        default: true,
+    },
     resetPasswordToken: String,
     resetPasswordExpire: Date,
+    lastLogin: {
+        type: Date,
+    },
 }, {
     timestamps: true,
 });
+// Index for better query performance
+UserSchema.index({ email: 1 });
+UserSchema.index({ role: 1 });
+UserSchema.index({ isActive: 1 });
+UserSchema.index({ createdAt: 1 });
 // Hash password before saving
 UserSchema.pre('save', async function (next) {
     if (!this.isModified('password'))
@@ -95,7 +123,7 @@ UserSchema.methods.getResetPasswordOtp = function () {
     // Generate a 6-digit numeric OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     console.log(`[getResetPasswordOtp] Generated OTP for ${this.email}: ${otp}`);
-    // Hash OTP before saving to database for security (use syncronous bcrypt for simplicity)
+    // Hash OTP before saving to database for security
     const hashedOtp = bcrypt_1.default.hashSync(otp, 10);
     console.log(`[getResetPasswordOtp] Hashed OTP stored in DB for ${this.email}`);
     // Store the hashed OTP and set expiry
@@ -104,6 +132,52 @@ UserSchema.methods.getResetPasswordOtp = function () {
     this.resetPasswordExpire = new Date(Date.now() + 60 * 60 * 1000);
     console.log(`[getResetPasswordOtp] OTP will expire at ${this.resetPasswordExpire}`);
     return otp; // Return the plain OTP for sending via email
+};
+// Method to update last login
+UserSchema.methods.updateLastLogin = function () {
+    this.lastLogin = new Date();
+    return this.save();
+};
+// Virtual for full name (if needed)
+UserSchema.virtual('fullName').get(function () {
+    return this.name;
+});
+// Method to check if user has permission
+UserSchema.methods.hasPermission = function (permission) {
+    if (!this.permissions || this.permissions.length === 0)
+        return false;
+    return this.permissions.includes(permission);
+};
+// Method to add permission
+UserSchema.methods.addPermission = function (permission) {
+    if (!this.permissions) {
+        this.permissions = [];
+    }
+    if (!this.permissions.includes(permission)) {
+        this.permissions.push(permission);
+    }
+    return this.save();
+};
+// Method to remove permission
+UserSchema.methods.removePermission = function (permission) {
+    if (!this.permissions)
+        return this.save();
+    this.permissions = this.permissions.filter((p) => p !== permission);
+    return this.save();
+};
+// Static method to get user statistics
+UserSchema.statics.getStats = async function () {
+    const stats = await this.aggregate([
+        {
+            $group: {
+                _id: '$role',
+                count: { $sum: 1 },
+                active: { $sum: { $cond: ['$isActive', 1, 0] } },
+                inactive: { $sum: { $cond: ['$isActive', 0, 1] } }
+            }
+        }
+    ]);
+    return stats;
 };
 const User = mongoose_1.default.model('User', UserSchema);
 exports.default = User;
