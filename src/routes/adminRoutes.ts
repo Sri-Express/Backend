@@ -1,4 +1,4 @@
-// src/routes/adminRoutes.ts - COMPLETE WORKING VERSION
+// src/routes/adminRoutes.ts - UPDATED WITH REAL FLEET & AI APIS
 import express from 'express';
 import { requireSystemAdmin } from '../middleware/adminMiddleware';
 
@@ -47,6 +47,34 @@ import {
   sendEmergencyBroadcast,
   getEmergencyTeams
 } from '../controllers/adminEmergencyController';
+
+// Fleet management controllers - ⭐ NEW!
+import {
+  getAllFleets,
+  getFleetById,
+  createFleet,
+  updateFleet,
+  approveFleet,
+  rejectFleet,
+  suspendFleet,
+  reactivateFleet,
+  deleteFleet,
+  getFleetStats,
+  getInspectionsDue,
+  getComplianceIssues
+} from '../controllers/adminFleetController';
+
+// AI management controllers - ⭐ NEW!
+import {
+  getAISystemOverview,
+  getAIModule,
+  toggleAIModule,
+  startTraining,
+  getTrainingStatus,
+  getAllTrainingJobs,
+  updateModuleConfig,
+  getAILogs
+} from '../controllers/adminAIController';
 
 const router = express.Router();
 
@@ -196,115 +224,54 @@ router.get('/analytics/security', async (req, res) => {
 });
 
 // ============================
-// FLEET MANAGEMENT ROUTES
+// FLEET MANAGEMENT ROUTES - ⭐ REAL IMPLEMENTATION!
 // ============================
 
-// Get fleet registrations
-router.get('/fleet', (req, res) => {
-  res.json({
-    fleets: [],
-    pendingApprovals: 0,
-    activeFleets: 12,
-    totalVehicles: 245,
-    message: 'Fleet management API not implemented yet'
-  });
-});
+// Get all fleet applications with pagination and filtering
+router.get('/fleet', getAllFleets);
+
+// Get fleet statistics
+router.get('/fleet/stats', getFleetStats);
+
+// Get fleets requiring inspection
+router.get('/fleet/inspections', getInspectionsDue);
+
+// Get compliance issues
+router.get('/fleet/compliance', getComplianceIssues);
+
+// Create new fleet application
+router.post('/fleet', createFleet);
 
 // SPECIFIC FLEET ROUTES
-router.put('/fleet/:id/approve', (req, res) => {
-  res.json({
-    fleetId: req.params.id,
-    status: 'approved',
-    message: 'Fleet approval API not implemented yet'
-  });
-});
-
-router.put('/fleet/:id/reject', (req, res) => {
-  res.json({
-    fleetId: req.params.id,
-    status: 'rejected', 
-    reason: req.body.reason || 'Not specified',
-    message: 'Fleet rejection API not implemented yet'
-  });
-});
-
-// GENERAL FLEET ROUTES
-router.get('/fleet/:id', (req, res) => {
-  res.json({
-    fleetId: req.params.id,
-    message: 'Fleet details API not implemented yet'
-  });
-});
+router.get('/fleet/:id', getFleetById);
+router.put('/fleet/:id', updateFleet);
+router.put('/fleet/:id/approve', approveFleet);
+router.put('/fleet/:id/reject', rejectFleet);
+router.put('/fleet/:id/suspend', suspendFleet);
+router.put('/fleet/:id/reactivate', reactivateFleet);
+router.delete('/fleet/:id', deleteFleet);
 
 // ============================
-// AI MODULE ROUTES
+// AI MODULE ROUTES - ⭐ REAL IMPLEMENTATION!
 // ============================
 
-// Get AI module status
-router.get('/ai', (req, res) => {
-  res.json({
-    status: 'inactive',
-    modules: [
-      { name: 'route_optimization', status: 'inactive', accuracy: 0 },
-      { name: 'demand_prediction', status: 'inactive', accuracy: 0 },
-      { name: 'chatbot', status: 'inactive', accuracy: 0 }
-    ],
-    overall_accuracy: 0,
-    last_training: null,
-    message: 'AI module API not implemented yet'
-  });
-});
+// Get AI system overview and statistics
+router.get('/ai', getAISystemOverview);
 
-// Toggle AI module
-router.post('/ai/toggle', (req, res) => {
-  const { module, enabled } = req.body;
-  res.json({
-    module,
-    status: enabled ? 'enabled' : 'disabled',
-    message: 'AI module toggle API not implemented yet'
-  });
-});
+// Get all training jobs
+router.get('/ai/training', getAllTrainingJobs);
 
-// Get AI configuration
-router.get('/ai/config', (req, res) => {
-  res.json({
-    config: {
-      auto_retrain: false,
-      confidence_threshold: 0.8,
-      model_version: '1.0.0'
-    },
-    message: 'AI configuration API not implemented yet'
-  });
-});
+// Get AI system logs
+router.get('/ai/logs', getAILogs);
 
-// Update AI configuration
-router.put('/ai/config', (req, res) => {
-  res.json({
-    config: req.body,
-    updated: true,
-    message: 'AI configuration update API not implemented yet'
-  });
-});
+// SPECIFIC AI MODULE ROUTES
+router.get('/ai/:moduleId', getAIModule);
+router.post('/ai/:moduleId/toggle', toggleAIModule);
+router.post('/ai/:moduleId/train', startTraining);
+router.put('/ai/:moduleId/config', updateModuleConfig);
 
-// SPECIFIC AI ROUTES
-router.post('/ai/train', (req, res) => {
-  res.json({
-    training_id: 'train_' + Date.now(),
-    status: 'started',
-    estimated_duration: '2 hours',
-    message: 'AI training API not implemented yet'
-  });
-});
-
-router.get('/ai/train/:id', (req, res) => {
-  res.json({
-    training_id: req.params.id,
-    status: 'completed',
-    progress: 100,
-    accuracy: 94.2,
-    message: 'AI training status API not implemented yet'
-  });
-});
+// SPECIFIC TRAINING JOB ROUTES
+router.get('/ai/training/:jobId', getTrainingStatus);
 
 // ============================
 // UTILITY ROUTES
@@ -328,8 +295,8 @@ router.post('/test/activity', async (req, res) => {
 router.get('/docs', (req, res) => {
   res.json({
     message: 'Sri Express Admin API Documentation',
-    version: '1.4.0',
-    status: 'Active and working',
+    version: '2.0.0', // Updated version!
+    status: 'Complete - All APIs Implemented', // Updated status!
     endpoints: {
       users: {
         'GET /users': 'Get all users with pagination',
@@ -342,6 +309,31 @@ router.get('/docs', (req, res) => {
         'PUT /users/:id': 'Update user',
         'DELETE /users/:id': 'Delete user',
         'PATCH /users/:id/toggle-status': 'Toggle user status'
+      },
+      devices: {
+        'GET /devices': 'Get all devices with pagination',
+        'GET /devices/stats': 'Get device statistics',
+        'POST /devices': 'Create new device',
+        'GET /devices/:id': 'Get device by ID',
+        'PUT /devices/:id': 'Update device',
+        'DELETE /devices/:id': 'Delete device'
+      },
+      fleet: { // ⭐ NEW SECTION!
+        'GET /fleet': 'Get all fleet applications',
+        'GET /fleet/stats': 'Get fleet statistics',
+        'POST /fleet': 'Create fleet application',
+        'GET /fleet/:id': 'Get fleet by ID',
+        'PUT /fleet/:id/approve': 'Approve fleet application',
+        'PUT /fleet/:id/reject': 'Reject fleet application',
+        'PUT /fleet/:id/suspend': 'Suspend fleet operations'
+      },
+      ai: { // ⭐ NEW SECTION!
+        'GET /ai': 'Get AI system overview',
+        'GET /ai/:moduleId': 'Get AI module details',
+        'POST /ai/:moduleId/toggle': 'Start/stop AI module',
+        'POST /ai/:moduleId/train': 'Start module training',
+        'GET /ai/training': 'Get all training jobs',
+        'GET /ai/training/:jobId': 'Get training job status'
       }
     }
   });
