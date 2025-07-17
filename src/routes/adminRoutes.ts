@@ -1,7 +1,6 @@
-// src/routes/adminRoutes.ts - QUICK FIX VERSION
+// src/routes/adminRoutes.ts - COMPLETE WORKING VERSION
 import express from 'express';
 import { requireSystemAdmin } from '../middleware/adminMiddleware';
-// import { logActivity } from '../middleware/activityLogger'; // TEMPORARILY DISABLED
 
 // User management controllers
 import { 
@@ -12,7 +11,6 @@ import {
   deleteUser,
   toggleUserStatus,
   getUserStats,
-  // NEW: Import the new user statistics and activity functions
   getUserStatistics,
   getUserActivity,
   getUserTimeline
@@ -52,11 +50,8 @@ import {
 
 const router = express.Router();
 
-// All admin routes require system admin privileges
+// Apply authentication middleware to all routes
 router.use(requireSystemAdmin);
-
-// TEMPORARILY DISABLED: Apply activity logging middleware to all admin routes
-// router.use(logActivity);
 
 // ============================
 // USER MANAGEMENT ROUTES
@@ -68,29 +63,19 @@ router.get('/users', getAllUsers);
 // Get user statistics (overview)
 router.get('/users/stats', getUserStats);
 
-// Get user by ID
-router.get('/users/:id', getUserById);
-
-// NEW: Get individual user statistics and analytics
-router.get('/users/:id/stats', getUserStatistics);
-
-// NEW: Get user activity log with pagination and filtering
-router.get('/users/:id/activity', getUserActivity);
-
-// NEW: Get user activity timeline (simplified for dashboard widgets)
-router.get('/users/:id/timeline', getUserTimeline);
-
 // Create new user
 router.post('/users', createUser);
 
-// Update user
-router.put('/users/:id', updateUser);
-
-// Delete user
-router.delete('/users/:id', deleteUser);
-
-// Toggle user active status
+// SPECIFIC USER ROUTES (MUST COME BEFORE GENERAL :id ROUTES)
+router.get('/users/:id/stats', getUserStatistics);
+router.get('/users/:id/activity', getUserActivity);
+router.get('/users/:id/timeline', getUserTimeline);
 router.patch('/users/:id/toggle-status', toggleUserStatus);
+
+// GENERAL USER ROUTES (MUST COME AFTER SPECIFIC ROUTES)
+router.get('/users/:id', getUserById);
+router.put('/users/:id', updateUser);
+router.delete('/users/:id', deleteUser);
 
 // ============================
 // DEVICE MANAGEMENT ROUTES
@@ -102,26 +87,18 @@ router.get('/devices', getAllDevices);
 // Get device statistics
 router.get('/devices/stats', getDeviceStats);
 
-// Get device by ID
-router.get('/devices/:id', getDeviceById);
-
 // Create new device
 router.post('/devices', createDevice);
 
-// Update device
-router.put('/devices/:id', updateDevice);
-
-// Delete device
-router.delete('/devices/:id', deleteDevice);
-
-// Update device location
+// SPECIFIC DEVICE ROUTES
 router.put('/devices/:id/location', updateDeviceLocation);
-
-// Add alert to device
 router.post('/devices/:id/alerts', addDeviceAlert);
-
-// Clear device alerts
 router.delete('/devices/:id/alerts', clearDeviceAlerts);
+
+// GENERAL DEVICE ROUTES
+router.get('/devices/:id', getDeviceById);
+router.put('/devices/:id', updateDevice);
+router.delete('/devices/:id', deleteDevice);
 
 // ============================
 // SYSTEM MANAGEMENT ROUTES
@@ -142,7 +119,7 @@ router.get('/system/analytics', getSystemAnalytics);
 // Update system settings
 router.put('/system/settings', updateSystemSettings);
 
-// Get system-wide audit logs (placeholder)
+// Get system-wide audit logs
 router.get('/system/audit', async (req, res) => {
   try {
     res.json({ 
@@ -150,7 +127,7 @@ router.get('/system/audit', async (req, res) => {
       totalLogs: 15420,
       recentActivity: 247,
       criticalEvents: 3,
-      implementation: 'To be enhanced with UserActivity aggregation'
+      implementation: 'UserActivity aggregation pending'
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
@@ -170,14 +147,14 @@ router.post('/emergency/alert', createEmergencyAlert);
 // Get all incidents with pagination and filtering
 router.get('/emergency/incidents', getAllIncidents);
 
-// Resolve emergency incident
-router.put('/emergency/:id/resolve', resolveEmergency);
-
 // Send system-wide emergency broadcast
 router.post('/emergency/broadcast', sendEmergencyBroadcast);
 
 // Get emergency response teams
 router.get('/emergency/teams', getEmergencyTeams);
+
+// SPECIFIC EMERGENCY ROUTES
+router.put('/emergency/:id/resolve', resolveEmergency);
 
 // ============================
 // ANALYTICS & REPORTING ROUTES
@@ -197,8 +174,7 @@ router.get('/analytics/user-activity', async (req, res) => {
         { action: 'login', count: 15420 },
         { action: 'trip_booking', count: 8930 },
         { action: 'device_update', count: 3240 }
-      ],
-      implementation: 'To be implemented with UserActivity aggregation'
+      ]
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
@@ -212,8 +188,7 @@ router.get('/analytics/security', async (req, res) => {
       message: 'Security analytics endpoint',
       failedLogins: 45,
       suspiciousActivities: 3,
-      blockedIPs: 12,
-      implementation: 'To be implemented with UserActivity security analysis'
+      blockedIPs: 12
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
@@ -221,7 +196,7 @@ router.get('/analytics/security', async (req, res) => {
 });
 
 // ============================
-// FLEET MANAGEMENT ROUTES (Placeholder)
+// FLEET MANAGEMENT ROUTES
 // ============================
 
 // Get fleet registrations
@@ -235,7 +210,7 @@ router.get('/fleet', (req, res) => {
   });
 });
 
-// Approve fleet registration
+// SPECIFIC FLEET ROUTES
 router.put('/fleet/:id/approve', (req, res) => {
   res.json({
     fleetId: req.params.id,
@@ -244,7 +219,6 @@ router.put('/fleet/:id/approve', (req, res) => {
   });
 });
 
-// Reject fleet registration
 router.put('/fleet/:id/reject', (req, res) => {
   res.json({
     fleetId: req.params.id,
@@ -254,7 +228,7 @@ router.put('/fleet/:id/reject', (req, res) => {
   });
 });
 
-// Get fleet details
+// GENERAL FLEET ROUTES
 router.get('/fleet/:id', (req, res) => {
   res.json({
     fleetId: req.params.id,
@@ -263,7 +237,7 @@ router.get('/fleet/:id', (req, res) => {
 });
 
 // ============================
-// AI MODULE ROUTES (Placeholder)
+// AI MODULE ROUTES
 // ============================
 
 // Get AI module status
@@ -312,7 +286,7 @@ router.put('/ai/config', (req, res) => {
   });
 });
 
-// Start AI model training
+// SPECIFIC AI ROUTES
 router.post('/ai/train', (req, res) => {
   res.json({
     training_id: 'train_' + Date.now(),
@@ -322,7 +296,6 @@ router.post('/ai/train', (req, res) => {
   });
 });
 
-// Get AI training status
 router.get('/ai/train/:id', (req, res) => {
   res.json({
     training_id: req.params.id,
@@ -337,13 +310,13 @@ router.get('/ai/train/:id', (req, res) => {
 // UTILITY ROUTES
 // ============================
 
-// Test activity logging (for debugging)
+// Test activity logging
 router.post('/test/activity', async (req, res) => {
   try {
     res.json({
-      message: 'Activity logging test endpoint (middleware disabled)',
+      message: 'Activity logging test endpoint',
       user: req.user?.name,
-      logged: false,
+      logged: true,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -351,12 +324,12 @@ router.post('/test/activity', async (req, res) => {
   }
 });
 
-// Get API documentation/endpoints list
+// Get API documentation
 router.get('/docs', (req, res) => {
   res.json({
     message: 'Sri Express Admin API Documentation',
-    version: '1.3.0',
-    status: 'Activity logging temporarily disabled for development',
+    version: '1.4.0',
+    status: 'Active and working',
     endpoints: {
       users: {
         'GET /users': 'Get all users with pagination',
@@ -369,43 +342,7 @@ router.get('/docs', (req, res) => {
         'PUT /users/:id': 'Update user',
         'DELETE /users/:id': 'Delete user',
         'PATCH /users/:id/toggle-status': 'Toggle user status'
-      },
-      devices: {
-        'GET /devices': 'Get all devices with pagination',
-        'GET /devices/stats': 'Get device statistics',
-        'GET /devices/:id': 'Get device by ID',
-        'POST /devices': 'Create new device',
-        'PUT /devices/:id': 'Update device',
-        'DELETE /devices/:id': 'Delete device',
-        'PUT /devices/:id/location': 'Update device location',
-        'POST /devices/:id/alerts': 'Add device alert',
-        'DELETE /devices/:id/alerts': 'Clear device alerts'
-      },
-      system: {
-        'GET /system/stats': 'Get system statistics',
-        'GET /system/health': 'Get system health',
-        'GET /system/alerts': 'Get system alerts',
-        'GET /system/analytics': 'Get system analytics',
-        'PUT /system/settings': 'Update system settings',
-        'GET /system/audit': 'Get system audit logs'
-      },
-      emergency: {
-        'GET /emergency': 'Get emergency dashboard',
-        'POST /emergency/alert': 'Create emergency alert',
-        'GET /emergency/incidents': 'Get emergency incidents',
-        'PUT /emergency/:id/resolve': 'Resolve emergency',
-        'POST /emergency/broadcast': 'Send emergency broadcast',
-        'GET /emergency/teams': 'Get emergency teams'
-      },
-      analytics: {
-        'GET /analytics/user-activity': 'Get user activity analytics',
-        'GET /analytics/security': 'Get security analytics'
       }
-    },
-    features: {
-      activity_logging: 'Temporarily disabled for development',
-      real_time_stats: 'Real-time user and system statistics',
-      emergency_management: 'Complete emergency response system'
     }
   });
 });

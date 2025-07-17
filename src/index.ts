@@ -1,4 +1,4 @@
-// src/index.ts
+// src/index.ts - CLEAN VERSION (NO DUPLICATES)
 import express from 'express';
 import mongoose from 'mongoose';
 import helmet from 'helmet';
