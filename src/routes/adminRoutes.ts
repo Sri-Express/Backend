@@ -35,6 +35,16 @@ import {
   updateSystemSettings
 } from '../controllers/adminSystemController';
 
+// Emergency management controllers
+import {
+  getEmergencyDashboard,
+  createEmergencyAlert,
+  getAllIncidents,
+  resolveEmergency,
+  sendEmergencyBroadcast,
+  getEmergencyTeams
+} from '../controllers/adminEmergencyController';
+
 const router = express.Router();
 
 // All admin routes require system admin privileges
@@ -116,6 +126,28 @@ router.get('/system/analytics', getSystemAnalytics);
 router.put('/system/settings', updateSystemSettings);
 
 // ============================
+// EMERGENCY MANAGEMENT ROUTES
+// ============================
+
+// Get emergency dashboard data
+router.get('/emergency', getEmergencyDashboard);
+
+// Create emergency alert
+router.post('/emergency/alert', createEmergencyAlert);
+
+// Get all incidents with pagination and filtering
+router.get('/emergency/incidents', getAllIncidents);
+
+// Resolve emergency incident
+router.put('/emergency/:id/resolve', resolveEmergency);
+
+// Send system-wide emergency broadcast
+router.post('/emergency/broadcast', sendEmergencyBroadcast);
+
+// Get emergency response teams
+router.get('/emergency/teams', getEmergencyTeams);
+
+// ============================
 // FLEET MANAGEMENT ROUTES (Placeholder)
 // ============================
 
@@ -174,26 +206,6 @@ router.get('/ai/config', (req, res) => {
 router.put('/ai/config', (req, res) => {
   res.json({
     message: 'AI configuration update API not implemented yet'
-  });
-});
-
-// ============================
-// EMERGENCY ROUTES (Placeholder)
-// ============================
-
-// Get emergency status
-router.get('/emergency', (req, res) => {
-  res.json({
-    status: 'normal',
-    incidents: [],
-    message: 'Emergency management API not implemented yet'
-  });
-});
-
-// Trigger emergency alert
-router.post('/emergency/alert', (req, res) => {
-  res.json({
-    message: 'Emergency alert API not implemented yet'
   });
 });
 
