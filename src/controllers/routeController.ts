@@ -1,4 +1,4 @@
-// src/controllers/routeController.ts
+// src/controllers/routeController.ts - COMPLETELY FIXED VERSION
 import { Request, Response } from 'express';
 import Route from '../models/Route';
 import Fleet from '../models/Fleet';
@@ -135,7 +135,8 @@ export const searchRoutes = async (req: Request, res: Response): Promise<void> =
       
       if (date) {
         const searchDate = new Date(date as string);
-        const dayOfWeek = searchDate.toLocaleDateString('en-US', { weekday: 'lowercase' });
+        // ✅ FIXED: Get day name properly then convert to lowercase
+        const dayOfWeek = searchDate.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
         filteredSchedules = filteredSchedules.filter(schedule => 
           schedule.daysOfWeek.includes(dayOfWeek)
         );
@@ -180,7 +181,7 @@ export const getRouteById = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    // Get next departures
+    // Get next departures - ✅ FIXED: Now properly typed
     const nextDepartures = route.getNextDepartures(10);
 
     res.json({
@@ -222,22 +223,26 @@ export const getRouteSchedules = async (req: Request, res: Response): Promise<vo
     // Filter by date if provided
     if (date) {
       const searchDate = new Date(date as string);
-      const dayOfWeek = searchDate.toLocaleDateString('en-US', { weekday: 'lowercase' });
+      // ✅ FIXED: Get day name properly then convert to lowercase
+      const dayOfWeek = searchDate.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
       schedules = schedules.filter(schedule => 
         schedule.daysOfWeek.includes(dayOfWeek)
       );
     }
 
-    // Add pricing for each schedule
-    const schedulesWithPricing = schedules.map(schedule => ({
-      ...schedule.toObject(),
-      pricing: {
-        regular: route.calculatePrice('regular'),
-        student: route.calculatePrice('student'),
-        senior: route.calculatePrice('senior'),
-        military: route.calculatePrice('military')
-      }
-    }));
+    // Add pricing for each schedule - ✅ FIXED: Handle toObject properly
+    const schedulesWithPricing = schedules.map(schedule => {
+      const scheduleObj = schedule.toObject ? schedule.toObject() : schedule;
+      return {
+        ...scheduleObj,
+        pricing: {
+          regular: route.calculatePrice('regular'),
+          student: route.calculatePrice('student'),
+          senior: route.calculatePrice('senior'),
+          military: route.calculatePrice('military')
+        }
+      };
+    });
 
     res.json({
       routeId: route._id,
@@ -268,12 +273,12 @@ export const getRouteRealTime = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    // Get live vehicle locations for this route
+    // Get live vehicle locations for this route - ✅ FIXED: Now using proper static method
     const liveVehicles = await LocationTracking.getRouteVehicles(route._id);
 
-    // Calculate average delay
+    // Calculate average delay - ✅ FIXED: Added proper TypeScript types
     const totalDelay = liveVehicles.reduce(
-      (sum, vehicle) => sum + vehicle.operationalInfo.delays.currentDelay, 
+      (sum: number, vehicle: any) => sum + vehicle.operationalInfo.delays.currentDelay, 
       0
     );
     const avgDelay = liveVehicles.length > 0 ? totalDelay / liveVehicles.length : 0;
@@ -286,8 +291,8 @@ export const getRouteRealTime = async (req: Request, res: Response): Promise<voi
       serviceStatus = 'severely_delayed';
     }
 
-    // Count vehicles by status
-    const vehicleStatusCount = liveVehicles.reduce((acc, vehicle) => {
+    // Count vehicles by status - ✅ FIXED: Added proper TypeScript types
+    const vehicleStatusCount = liveVehicles.reduce((acc: any, vehicle: any) => {
       const status = vehicle.operationalInfo.status;
       acc[status] = (acc[status] || 0) + 1;
       return acc;
@@ -302,7 +307,7 @@ export const getRouteRealTime = async (req: Request, res: Response): Promise<voi
         averageDelay: Math.round(avgDelay),
         vehicleStatusCount
       },
-      liveVehicles: liveVehicles.map(vehicle => ({
+      liveVehicles: liveVehicles.map((vehicle: any) => ({
         vehicleId: vehicle.vehicleId,
         vehicleNumber: vehicle.vehicleNumber,
         location: vehicle.location,

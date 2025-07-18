@@ -1,4 +1,4 @@
-// src/models/Route.ts
+// src/models/Route.ts - COMPLETELY FIXED VERSION
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IRoute extends Document {
@@ -28,6 +28,7 @@ export interface IRoute extends Document {
     frequency: number;     // minutes between departures
     daysOfWeek: string[];  // ["monday", "tuesday", ...]
     isActive: boolean;
+    toObject(): any; // Add this method to the interface
   }];
   operatorInfo: {
     fleetId: mongoose.Types.ObjectId;
@@ -53,6 +54,10 @@ export interface IRoute extends Document {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  
+  // Add method signatures to interface
+  calculatePrice(passengerType?: string): number;
+  getNextDepartures(limit?: number): any[];
 }
 
 const RouteSchema = new Schema<IRoute>(
@@ -236,10 +241,11 @@ RouteSchema.methods.calculatePrice = function(passengerType: string = 'regular')
   return Math.round(totalPrice);
 };
 
-// Get next departures method
+// Get next departures method - FIXED THE ISSUES! ⭐
 RouteSchema.methods.getNextDepartures = function(limit: number = 5) {
   const now = new Date();
-  const currentDay = now.toLocaleLString('en-US', { weekday: 'lowercase' });
+  // FIX: Get day name properly
+  const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase(); // ✅ FIXED
   const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
   
   return this.schedules

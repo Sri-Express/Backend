@@ -1,5 +1,5 @@
-// src/models/LocationTracking.ts
-import mongoose, { Document, Schema } from 'mongoose';
+// src/models/LocationTracking.ts - FIXED VERSION WITH STATIC METHODS
+import mongoose, { Document, Schema, Model } from 'mongoose';
 
 export interface ILocationTracking extends Document {
   deviceId: mongoose.Types.ObjectId;
@@ -56,6 +56,22 @@ export interface ILocationTracking extends Document {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  
+  // Instance methods
+  isDelayed(thresholdMinutes?: number): boolean;
+  getEstimatedArrival(): Date;
+  isNearCapacity(threshold?: number): boolean;
+}
+
+// Interface for static methods
+export interface ILocationTrackingModel extends Model<ILocationTracking> {
+  getRouteVehicles(routeId: mongoose.Types.ObjectId): Promise<ILocationTracking[]>;
+  getLatestLocation(vehicleId: string): Promise<ILocationTracking | null>;
+  getVehiclesByArea(bounds: {
+    northEast: { lat: number; lng: number };
+    southWest: { lat: number; lng: number };
+  }): Promise<ILocationTracking[]>;
+  getTrackingStats(): Promise<any[]>;
 }
 
 const LocationTrackingSchema = new Schema<ILocationTracking>(
@@ -279,24 +295,22 @@ LocationTrackingSchema.pre('save', function(next) {
   next();
 });
 
-// Method to check if vehicle is delayed
+// Instance Methods
 LocationTrackingSchema.methods.isDelayed = function(thresholdMinutes: number = 5) {
   return this.operationalInfo.delays.currentDelay >= thresholdMinutes;
 };
 
-// Method to get estimated arrival time
 LocationTrackingSchema.methods.getEstimatedArrival = function() {
   const baseETA = new Date(this.operationalInfo.tripInfo.estimatedArrival);
   const delayMs = this.operationalInfo.delays.currentDelay * 60 * 1000;
   return new Date(baseETA.getTime() + delayMs);
 };
 
-// Method to check if vehicle is near capacity
 LocationTrackingSchema.methods.isNearCapacity = function(threshold: number = 80) {
   return this.passengerLoad.loadPercentage >= threshold;
 };
 
-// Static method to get real-time locations for a route
+// Static Methods - ⭐ ADDED THE MISSING METHODS!
 LocationTrackingSchema.statics.getRouteVehicles = async function(routeId: mongoose.Types.ObjectId) {
   return this.find({
     routeId,
@@ -310,7 +324,6 @@ LocationTrackingSchema.statics.getRouteVehicles = async function(routeId: mongoo
   .populate('routeId', 'name startLocation endLocation');
 };
 
-// Static method to get latest location for a vehicle
 LocationTrackingSchema.statics.getLatestLocation = async function(vehicleId: string) {
   return this.findOne({
     vehicleId,
@@ -320,7 +333,6 @@ LocationTrackingSchema.statics.getLatestLocation = async function(vehicleId: str
   .populate('routeId', 'name startLocation endLocation waypoints');
 };
 
-// Static method to get vehicles by area
 LocationTrackingSchema.statics.getVehiclesByArea = async function(
   bounds: {
     northEast: { lat: number; lng: number };
@@ -345,7 +357,6 @@ LocationTrackingSchema.statics.getVehiclesByArea = async function(
   .populate('routeId', 'name startLocation endLocation');
 };
 
-// Static method to get tracking statistics
 LocationTrackingSchema.statics.getTrackingStats = async function() {
   const stats = await this.aggregate([
     {
@@ -370,6 +381,6 @@ LocationTrackingSchema.statics.getTrackingStats = async function() {
   return stats;
 };
 
-const LocationTracking = mongoose.model<ILocationTracking>('LocationTracking', LocationTrackingSchema);
+const LocationTracking = mongoose.model<ILocationTracking, ILocationTrackingModel>('LocationTracking', LocationTrackingSchema);
 
 export default LocationTracking;

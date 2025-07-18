@@ -1,5 +1,5 @@
-// src/models/Payment.ts
-import mongoose, { Document, Schema } from 'mongoose';
+// src/models/Payment.ts - FIXED VERSION WITH PROPER TYPESCRIPT
+import mongoose, { Document, Schema, Model } from 'mongoose';
 
 export interface IPayment extends Document {
   paymentId: string;
@@ -25,6 +25,7 @@ export interface IPayment extends Document {
     gatewayProvider?: string; // Stripe, PayPal, etc.
     authorizationCode?: string;
     merchantId?: string;
+    gatewayResponse?: any;
   };
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'refunded' | 'partially_refunded';
   statusHistory: [{
@@ -71,6 +72,18 @@ export interface IPayment extends Document {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+
+  // Instance methods
+  updateStatus(newStatus: string, reason?: string, updatedBy?: mongoose.Types.ObjectId): Promise<IPayment>;
+  processRefund(refundAmount: number, reason: string, processedBy: mongoose.Types.ObjectId, refundMethod?: string): Promise<IPayment>;
+  calculateProcessingFee(): number;
+}
+
+// Interface for static methods
+export interface IPaymentModel extends Model<IPayment> {
+  getPaymentStats(userId?: mongoose.Types.ObjectId): Promise<any[]>;
+  getRevenueByPeriod(startDate: Date, endDate: Date): Promise<any[]>;
+  getPaymentMethodStats(): Promise<any[]>;
 }
 
 const PaymentSchema = new Schema<IPayment>(
@@ -163,6 +176,9 @@ const PaymentSchema = new Schema<IPayment>(
       },
       merchantId: {
         type: String,
+      },
+      gatewayResponse: {
+        type: Schema.Types.Mixed,
       }
     },
     status: {
@@ -316,7 +332,7 @@ PaymentSchema.pre('save', function(next) {
   next();
 });
 
-// Method to update status with history tracking
+// Instance Methods
 PaymentSchema.methods.updateStatus = function(
   newStatus: string, 
   reason?: string, 
@@ -350,7 +366,6 @@ PaymentSchema.methods.updateStatus = function(
   return this.save();
 };
 
-// Method to process refund
 PaymentSchema.methods.processRefund = function(
   refundAmount: number,
   reason: string,
@@ -374,7 +389,6 @@ PaymentSchema.methods.processRefund = function(
   return this.updateStatus(newStatus, `Refund processed: ${reason}`, processedBy);
 };
 
-// Method to calculate processing fee
 PaymentSchema.methods.calculateProcessingFee = function() {
   let feePercentage = 0;
   
@@ -396,7 +410,7 @@ PaymentSchema.methods.calculateProcessingFee = function() {
   return Math.round(this.amount.subtotal * (feePercentage / 100));
 };
 
-// Static method to get payment statistics
+// Static Methods
 PaymentSchema.statics.getPaymentStats = async function(userId?: mongoose.Types.ObjectId) {
   const matchQuery: any = { isActive: true };
   if (userId) matchQuery.userId = userId;
@@ -416,7 +430,6 @@ PaymentSchema.statics.getPaymentStats = async function(userId?: mongoose.Types.O
   return stats;
 };
 
-// Static method to get revenue by time period
 PaymentSchema.statics.getRevenueByPeriod = async function(
   startDate: Date,
   endDate: Date
@@ -447,7 +460,6 @@ PaymentSchema.statics.getRevenueByPeriod = async function(
   ]);
 };
 
-// Static method to get payment method usage
 PaymentSchema.statics.getPaymentMethodStats = async function() {
   return this.aggregate([
     { $match: { status: 'completed' } },
@@ -463,6 +475,6 @@ PaymentSchema.statics.getPaymentMethodStats = async function() {
   ]);
 };
 
-const Payment = mongoose.model<IPayment>('Payment', PaymentSchema);
+const Payment = mongoose.model<IPayment, IPaymentModel>('Payment', PaymentSchema);
 
 export default Payment;

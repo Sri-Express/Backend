@@ -1,5 +1,5 @@
-// src/models/Booking.ts
-import mongoose, { Document, Schema } from 'mongoose';
+// src/models/Booking.ts - FIXED VERSION WITH PROPER TYPESCRIPT
+import mongoose, { Document, Schema, Model } from 'mongoose';
 
 export interface IBooking extends Document {
   bookingId: string;
@@ -52,6 +52,18 @@ export interface IBooking extends Document {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+
+  // Instance methods
+  calculateRefund(): number;
+  getHoursUntilDeparture(): number;
+  canBeCancelled(): boolean;
+  canBeModified(): boolean;
+}
+
+// Interface for static methods
+export interface IBookingModel extends Model<IBooking> {
+  getBookingStats(userId?: mongoose.Types.ObjectId): Promise<any[]>;
+  getPopularRoutes(limit?: number): Promise<any[]>;
 }
 
 const BookingSchema = new Schema<IBooking>(
@@ -256,7 +268,7 @@ BookingSchema.pre('save', function(next) {
   next();
 });
 
-// Calculate refund amount method
+// Instance Methods
 BookingSchema.methods.calculateRefund = function() {
   const hoursUntilDeparture = this.getHoursUntilDeparture();
   let refundPercentage = 0;
@@ -272,7 +284,6 @@ BookingSchema.methods.calculateRefund = function() {
   return Math.round(this.pricing.totalAmount * (refundPercentage / 100));
 };
 
-// Get hours until departure
 BookingSchema.methods.getHoursUntilDeparture = function() {
   const departureDateTime = new Date(`${this.travelDate.toISOString().split('T')[0]}T${this.departureTime}:00`);
   const now = new Date();
@@ -280,7 +291,6 @@ BookingSchema.methods.getHoursUntilDeparture = function() {
   return Math.max(0, diffMs / (1000 * 60 * 60));
 };
 
-// Check if booking can be cancelled
 BookingSchema.methods.canBeCancelled = function() {
   const validStatuses = ['confirmed', 'pending'];
   const hasMinimumTime = this.getHoursUntilDeparture() > 0.5; // At least 30 minutes before departure
@@ -288,7 +298,6 @@ BookingSchema.methods.canBeCancelled = function() {
   return validStatuses.includes(this.status) && hasMinimumTime;
 };
 
-// Check if booking can be modified
 BookingSchema.methods.canBeModified = function() {
   const validStatuses = ['confirmed', 'pending'];
   const hasMinimumTime = this.getHoursUntilDeparture() > 2; // At least 2 hours before departure
@@ -296,7 +305,7 @@ BookingSchema.methods.canBeModified = function() {
   return validStatuses.includes(this.status) && hasMinimumTime;
 };
 
-// Static method to get booking statistics
+// Static Methods
 BookingSchema.statics.getBookingStats = async function(userId?: mongoose.Types.ObjectId) {
   const matchQuery: any = { isActive: true };
   if (userId) matchQuery.userId = userId;
@@ -315,7 +324,6 @@ BookingSchema.statics.getBookingStats = async function(userId?: mongoose.Types.O
   return stats;
 };
 
-// Static method to get popular routes
 BookingSchema.statics.getPopularRoutes = async function(limit: number = 10) {
   return this.aggregate([
     { $match: { isActive: true, status: { $in: ['confirmed', 'completed'] } } },
@@ -340,6 +348,6 @@ BookingSchema.statics.getPopularRoutes = async function(limit: number = 10) {
   ]);
 };
 
-const Booking = mongoose.model<IBooking>('Booking', BookingSchema);
+const Booking = mongoose.model<IBooking, IBookingModel>('Booking', BookingSchema);
 
 export default Booking;

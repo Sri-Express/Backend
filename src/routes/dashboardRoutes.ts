@@ -1,4 +1,4 @@
-// src/routes/dashboardRoutes.ts - Enhanced Version
+// src/routes/dashboardRoutes.ts - Simple Version (Works with your current controller)
 import express from 'express';
 import { protect } from '../middleware/authMiddleware';
 import { 
@@ -6,12 +6,7 @@ import {
   getRecentTrips,
   getUpcomingTrips,
   updateProfile,
-  createDemoTrip,
-  // New enhanced endpoints
-  getRecentBookings,
-  getUserActivity,
-  getFavoriteRoutes,
-  getTravelInsights
+  createDemoTrip
 } from '../controllers/dashboardController';
 
 const router = express.Router();
@@ -19,47 +14,11 @@ const router = express.Router();
 // All dashboard routes are protected
 router.use(protect);
 
-// ============================
-// CORE DASHBOARD ENDPOINTS
-// ============================
-
-// Get dashboard statistics (enhanced with booking data)
+// Core dashboard endpoints (using your existing functions)
 router.get('/stats', getDashboardStats);
-
-// Update user profile
-router.put('/profile', updateProfile);
-
-// ============================
-// BOOKING & TRIP ENDPOINTS
-// ============================
-
-// Get recent bookings (new system)
-router.get('/recent-bookings', getRecentBookings);
-
-// Get upcoming trips (enhanced with live data)
-router.get('/upcoming-trips', getUpcomingTrips);
-
-// Get recent trips (legacy compatibility)
 router.get('/recent-trips', getRecentTrips);
-
-// ============================
-// USER ACTIVITY & INSIGHTS
-// ============================
-
-// Get user activity summary
-router.get('/activity', getUserActivity);
-
-// Get favorite/frequently used routes
-router.get('/favorite-routes', getFavoriteRoutes);
-
-// Get travel insights and analytics
-router.get('/insights', getTravelInsights);
-
-// ============================
-// UTILITY ENDPOINTS
-// ============================
-
-// Create demo trips (for testing)
+router.get('/upcoming-trips', getUpcomingTrips);
+router.put('/profile', updateProfile);
 router.post('/demo-trip', createDemoTrip);
 
 export default router;
