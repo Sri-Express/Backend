@@ -1,10 +1,21 @@
-// src/controllers/bookingController.ts - FIXED VERSION
+// src/controllers/bookingController.ts - FIXED VERSION - Handle Payment Method Mapping
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import Booking from '../models/Booking';
 import Route from '../models/Route';
 import Payment from '../models/Payment';
 import User from '../models/User';
+
+// ✅ FIXED: Payment method mapping function
+const mapPaymentMethod = (frontendMethod: string): string => {
+  const mapping: { [key: string]: string } = {
+    'bank': 'bank_transfer',
+    'card': 'card',
+    'digital_wallet': 'digital_wallet', 
+    'cash': 'cash'
+  };
+  return mapping[frontendMethod] || frontendMethod;
+};
 
 // @desc    Get user bookings with filtering and pagination
 // @route   GET /api/bookings
@@ -41,20 +52,51 @@ export const createBooking = async (req: Request, res: Response): Promise<void> 
   try {
     if (!req.user) { res.status(401).json({ message: 'Not authorized' }); return; }
 
+    console.log('🎫 Creating booking for user:', req.user._id);
+    console.log('📋 Booking request data:', req.body);
+
     const { routeId, scheduleId, travelDate, departureTime, passengerInfo, seatInfo, paymentMethod } = req.body;
-    if (!routeId || !scheduleId || !travelDate || !departureTime || !passengerInfo || !seatInfo || !paymentMethod) { res.status(400).json({ message: 'Missing required booking information' }); return; }
+    
+    // ✅ FIXED: Enhanced validation
+    if (!routeId || !scheduleId || !travelDate || !departureTime || !passengerInfo || !seatInfo || !paymentMethod) { 
+      console.error('❌ Missing required fields:', { routeId: !!routeId, scheduleId: !!scheduleId, travelDate: !!travelDate, departureTime: !!departureTime, passengerInfo: !!passengerInfo, seatInfo: !!seatInfo, paymentMethod: !!paymentMethod });
+      res.status(400).json({ message: 'Missing required booking information' }); 
+      return; 
+    }
 
     // Get route information
     const route = await Route.findById(routeId);
-    if (!route || !route.isActive || route.status !== 'active') { res.status(404).json({ message: 'Route not found or not available' }); return; }
+    if (!route || !route.isActive || route.status !== 'active') { 
+      console.error('❌ Route not found or not active:', routeId);
+      res.status(404).json({ message: 'Route not found or not available' }); 
+      return; 
+    }
+
+    console.log('✅ Route found:', route.name);
 
     // Validate travel date is not in the past
-    const bookingDate = new Date(travelDate); const now = new Date();
-    if (bookingDate < now) { res.status(400).json({ message: 'Cannot book for past dates' }); return; }
+    const bookingDate = new Date(travelDate); 
+    const now = new Date();
+    if (bookingDate < now) { 
+      console.error('❌ Cannot book for past dates:', bookingDate);
+      res.status(400).json({ message: 'Cannot book for past dates' }); 
+      return; 
+    }
 
     // Check if seat is already booked for this route and date
-    const existingBooking = await Booking.findOne({ routeId, travelDate: bookingDate, departureTime, 'seatInfo.seatNumber': seatInfo.seatNumber, status: { $in: ['confirmed', 'pending'] }, isActive: true });
-    if (existingBooking) { res.status(400).json({ message: 'Seat already booked for this schedule' }); return; }
+    const existingBooking = await Booking.findOne({ 
+      routeId, 
+      travelDate: bookingDate, 
+      departureTime, 
+      'seatInfo.seatNumber': seatInfo.seatNumber, 
+      status: { $in: ['confirmed', 'pending'] }, 
+      isActive: true 
+    });
+    if (existingBooking) { 
+      console.error('❌ Seat already booked:', seatInfo.seatNumber);
+      res.status(400).json({ message: 'Seat already booked for this schedule' }); 
+      return; 
+    }
 
     // Calculate pricing
     const basePrice = route.calculatePrice(passengerInfo.passengerType || 'regular');
@@ -62,25 +104,116 @@ export const createBooking = async (req: Request, res: Response): Promise<void> 
     const discounts = 0; // Can be calculated based on promotions
     const totalAmount = basePrice + taxes - discounts;
 
-    // Create booking
-    const booking = new Booking({ userId: req.user._id, routeId, scheduleId, travelDate: bookingDate, departureTime, passengerInfo: { ...passengerInfo, email: passengerInfo.email || req.user.email }, seatInfo, pricing: { basePrice, taxes, discounts, totalAmount, currency: 'LKR' }, paymentInfo: { method: paymentMethod, status: 'pending' }, status: 'pending' });
+    console.log('💰 Pricing calculated:', { basePrice, taxes, discounts, totalAmount });
+
+    // ✅ FIXED: Ensure seat number exists
+    const finalSeatNumber = seatInfo.seatNumber || `${Math.floor(Math.random() * 50) + 1}${seatInfo.seatType[0].toUpperCase()}`;
+
+    // Create booking with proper validation
+    const bookingData = {
+      userId: req.user._id,
+      routeId,
+      scheduleId,
+      travelDate: bookingDate,
+      departureTime,
+      passengerInfo: {
+        name: passengerInfo.name?.trim(),
+        phone: passengerInfo.phone?.trim(),
+        email: passengerInfo.email?.trim() || req.user.email,
+        idType: passengerInfo.idType || 'nic',
+        idNumber: passengerInfo.idNumber?.trim(),
+        passengerType: passengerInfo.passengerType || 'regular'
+      },
+      seatInfo: {
+        seatNumber: finalSeatNumber,
+        seatType: seatInfo.seatType || 'window',
+        preferences: seatInfo.preferences || []
+      },
+      pricing: {
+        basePrice,
+        taxes,
+        discounts,
+        totalAmount,
+        currency: 'LKR'
+      },
+      paymentInfo: {
+        method: paymentMethod,
+        status: 'pending'
+      },
+      status: 'pending'
+    };
+
+    console.log('📝 Final booking data:', bookingData);
+
+    const booking = new Booking(bookingData);
     await booking.save();
 
-    // Create payment record
-    const payment = new Payment({ userId: req.user._id, bookingId: booking._id, amount: { subtotal: basePrice, taxes, fees: 0, discounts, total: totalAmount, currency: 'LKR' }, paymentMethod: { type: paymentMethod }, transactionInfo: { transactionId: `TXN${Date.now()}${Math.floor(Math.random() * 1000)}` }, billingInfo: { name: passengerInfo.name, email: passengerInfo.email || req.user.email, phone: passengerInfo.phone } });
+    console.log('✅ Booking created successfully:', booking.bookingId);
+
+    // ✅ FIXED: Create payment record with proper method mapping
+    const mappedPaymentMethod = mapPaymentMethod(paymentMethod);
+    console.log('💳 Payment method mapping:', paymentMethod, '->', mappedPaymentMethod);
+
+    const paymentData = {
+      userId: req.user._id,
+      bookingId: booking._id,
+      amount: {
+        subtotal: basePrice,
+        taxes,
+        fees: 0,
+        discounts,
+        total: totalAmount,
+        currency: 'LKR'
+      },
+      paymentMethod: {
+        type: mappedPaymentMethod,
+        provider: 'Sri Express Payment'
+      },
+      transactionInfo: {
+        transactionId: `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`
+      },
+      billingInfo: {
+        name: passengerInfo.name?.trim(),
+        email: passengerInfo.email?.trim() || req.user.email,
+        phone: passengerInfo.phone?.trim()
+      },
+      status: 'pending'
+    };
+
+    console.log('💳 Creating payment with data:', paymentData);
+
+    const payment = new Payment(paymentData);
     await payment.save();
 
-    // ✅ FIXED: Cast payment._id to proper ObjectId type
+    console.log('✅ Payment created successfully:', payment.paymentId);
+
+    // Update booking with payment reference
     booking.paymentInfo.paymentId = payment._id as Types.ObjectId;
+    booking.paymentInfo.status = 'pending';
     await booking.save();
 
     // Populate route information for response
     await booking.populate('routeId', 'name startLocation endLocation vehicleInfo');
 
-    res.status(201).json({ message: 'Booking created successfully', booking, payment: { id: payment._id, paymentId: payment.paymentId, amount: payment.amount, status: payment.status } });
+    console.log('🎉 Booking process completed successfully');
+
+    res.status(201).json({ 
+      message: 'Booking created successfully', 
+      booking, 
+      payment: { 
+        id: payment._id, 
+        paymentId: payment.paymentId, 
+        amount: payment.amount, 
+        status: payment.status,
+        transactionId: payment.transactionInfo.transactionId
+      } 
+    });
   } catch (error) {
-    console.error('Create booking error:', error);
-    res.status(500).json({ message: 'Server error', error: error instanceof Error ? error.message : 'Unknown error' });
+    console.error('💥 Create booking error:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
   }
 };
 

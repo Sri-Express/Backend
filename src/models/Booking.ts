@@ -1,4 +1,4 @@
-// src/models/Booking.ts - FIXED VERSION WITH PROPER TYPESCRIPT
+// src/models/Booking.ts - FIXED VERSION - Remove required from auto-generated fields
 import mongoose, { Document, Schema, Model } from 'mongoose';
 
 export interface IBooking extends Document {
@@ -70,7 +70,7 @@ const BookingSchema = new Schema<IBooking>(
   {
     bookingId: {
       type: String,
-      required: true,
+      // ✅ FIXED: Remove required - this is auto-generated
       unique: true,
     },
     userId: {
@@ -201,7 +201,7 @@ const BookingSchema = new Schema<IBooking>(
     },
     qrCode: {
       type: String,
-      required: true,
+      // ✅ FIXED: Remove required - this is auto-generated
     },
     cancellationInfo: {
       reason: {
@@ -255,8 +255,30 @@ BookingSchema.index({ 'paymentInfo.status': 1 });
 BookingSchema.index({ isActive: 1 });
 BookingSchema.index({ createdAt: 1 });
 
-// Generate bookingId and QR code before saving
+// ✅ FIXED: Enhanced pre-save middleware to ensure fields are set before validation
+BookingSchema.pre('validate', function(next) {
+  // Generate bookingId before validation if not present
+  if (!this.bookingId) {
+    this.bookingId = `BK${Date.now()}${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+  }
+  
+  // Generate QR code before validation if not present
+  if (!this.qrCode) {
+    this.qrCode = this.bookingId;
+  }
+
+  // ✅ FIXED: Auto-calculate pricing if not provided
+  if (!this.pricing.totalAmount && this.pricing.basePrice) {
+    this.pricing.taxes = Math.round(this.pricing.basePrice * 0.02);
+    this.pricing.totalAmount = this.pricing.basePrice + this.pricing.taxes - this.pricing.discounts;
+  }
+  
+  next();
+});
+
+// Keep the original pre-save as backup
 BookingSchema.pre('save', function(next) {
+  // Double-check that required fields are set
   if (!this.bookingId) {
     this.bookingId = `BK${Date.now()}${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
   }

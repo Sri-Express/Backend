@@ -29,6 +29,7 @@ import routeRoutes from './routes/routeRoutes';
 import bookingRoutes from './routes/bookingRoutes';
 import trackingRoutes from './routes/trackingRoutes';
 import paymentRoutes from './routes/paymentRoutes';
+import paymentSimulationRoutes from './routes/paymentSimulationRoutes';
 
 // Import middleware
 import { notFound, errorHandler } from './middleware/errorMiddleware';
@@ -91,6 +92,9 @@ app.get('/', (req, res) => {
     competition: 'IDEALIZE 2025 Ready! 🏆'
   });
 });
+
+
+app.use('/api/payment-simulation', paymentSimulationRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

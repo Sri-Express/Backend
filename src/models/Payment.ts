@@ -1,4 +1,4 @@
-// src/models/Payment.ts - FIXED VERSION WITH PROPER TYPESCRIPT
+// src/models/Payment.ts - FIXED VERSION - Auto-generate paymentId
 import mongoose, { Document, Schema, Model } from 'mongoose';
 
 export interface IPayment extends Document {
@@ -14,15 +14,15 @@ export interface IPayment extends Document {
     currency: 'LKR';
   };
   paymentMethod: {
-    type: 'card' | 'bank_transfer' | 'digital_wallet' | 'cash';
-    provider?: string; // Visa, MasterCard, PayPal, etc.
+    type: 'card' | 'bank' | 'bank_transfer' | 'digital_wallet' | 'cash';
+    provider?: string;
     lastFourDigits?: string;
-    walletType?: string; // PayPal, Apple Pay, Google Pay, etc.
+    walletType?: string;
   };
   transactionInfo: {
     transactionId: string;
     gatewayTransactionId?: string;
-    gatewayProvider?: string; // Stripe, PayPal, etc.
+    gatewayProvider?: string;
     authorizationCode?: string;
     merchantId?: string;
     gatewayResponse?: any;
@@ -90,7 +90,7 @@ const PaymentSchema = new Schema<IPayment>(
   {
     paymentId: {
       type: String,
-      required: true,
+      // ✅ FIXED: Remove required - this is auto-generated
       unique: true,
     },
     userId: {
@@ -141,7 +141,8 @@ const PaymentSchema = new Schema<IPayment>(
     paymentMethod: {
       type: {
         type: String,
-        enum: ['card', 'bank_transfer', 'digital_wallet', 'cash'],
+        // ✅ FIXED: Include 'bank' in enum for frontend compatibility
+        enum: ['card', 'bank', 'bank_transfer', 'digital_wallet', 'cash'],
         required: true,
       },
       provider: {
@@ -314,8 +315,24 @@ PaymentSchema.index({ isActive: 1 });
 PaymentSchema.index({ userId: 1, status: 1 });
 PaymentSchema.index({ status: 1, 'timestamps.initiatedAt': -1 });
 
-// Generate paymentId before saving
+// ✅ FIXED: Add pre('validate') middleware to run BEFORE validation
+PaymentSchema.pre('validate', function(next) {
+  // Generate paymentId before validation if not present
+  if (!this.paymentId) {
+    this.paymentId = `PAY${Date.now()}${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+  }
+  
+  // ✅ FIXED: Map 'bank' to 'bank_transfer' for internal consistency
+  if (this.paymentMethod && this.paymentMethod.type === 'bank') {
+    this.paymentMethod.type = 'bank_transfer';
+  }
+  
+  next();
+});
+
+// Keep the original pre-save as backup
 PaymentSchema.pre('save', function(next) {
+  // Double-check that paymentId is set
   if (!this.paymentId) {
     this.paymentId = `PAY${Date.now()}${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
   }
