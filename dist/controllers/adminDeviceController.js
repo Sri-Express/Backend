@@ -13,7 +13,7 @@ const getAllDevices = async (req, res) => {
     try {
         const { page = 1, limit = 10, search = '', status = 'all', vehicleType = 'all', assignedTo = 'all', sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
         // Build query
-        let query = {};
+        const query = {};
         // Search functionality
         if (search) {
             query.$or = [
@@ -22,27 +22,21 @@ const getAllDevices = async (req, res) => {
                 { 'assignedTo.name': { $regex: search, $options: 'i' } }
             ];
         }
-        // Status filter
-        if (status !== 'all') {
+        // Filter functionality
+        if (status !== 'all')
             query.status = status;
-        }
-        // Vehicle type filter
-        if (vehicleType !== 'all') {
+        if (vehicleType !== 'all')
             query.vehicleType = vehicleType;
-        }
-        // Assigned to filter
-        if (assignedTo !== 'all') {
+        if (assignedTo !== 'all')
             query['assignedTo.type'] = assignedTo;
-        }
-        // Only show active devices
+        // Only show active devices by default
         query.isActive = true;
         // Calculate pagination
-        const pageNumber = parseInt(page);
-        const pageSize = parseInt(limit);
+        const pageNumber = parseInt(page, 10);
+        const pageSize = parseInt(limit, 10);
         const skip = (pageNumber - 1) * pageSize;
         // Build sort object
-        const sort = {};
-        sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+        const sort = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
         // Get devices with pagination
         const devices = await Device_1.default.find(query)
             .sort(sort)
@@ -52,15 +46,6 @@ const getAllDevices = async (req, res) => {
         // Get total count for pagination
         const totalDevices = await Device_1.default.countDocuments(query);
         // Get device statistics
-        const stats = await Device_1.default.aggregate([
-            { $match: { isActive: true } },
-            {
-                $group: {
-                    _id: '$status',
-                    count: { $sum: 1 }
-                }
-            }
-        ]);
         const deviceStats = {
             totalDevices,
             onlineDevices: await Device_1.default.countDocuments({ status: 'online', isActive: true }),
@@ -118,8 +103,9 @@ exports.getDeviceById = getDeviceById;
 // @route   POST /api/admin/devices
 // @access  Private (System Admin)
 const createDevice = async (req, res) => {
+    var _a;
     try {
-        const { deviceId, vehicleNumber, vehicleType, assignedTo, firmwareVersion, installDate, location } = req.body;
+        const { deviceId, vehicleNumber, vehicleType, assignedTo, firmwareVersion, installDate, location, route } = req.body;
         // Validate required fields
         if (!deviceId || !vehicleNumber || !vehicleType || !assignedTo || !firmwareVersion || !installDate) {
             res.status(400).json({ message: 'All required fields must be provided' });
@@ -131,29 +117,37 @@ const createDevice = async (req, res) => {
             res.status(400).json({ message: 'Device with this ID already exists' });
             return;
         }
-        // Validate assigned user if not system
+        // Clean up assignedTo data
+        const cleanAssignedTo = {
+            type: assignedTo.type,
+            name: assignedTo.name || (assignedTo.type === 'system' ? 'System Control' : 'Unknown')
+        };
+        // Only add userId if not system and userId is provided
         if (assignedTo.type !== 'system' && assignedTo.userId) {
             const user = await User_1.default.findById(assignedTo.userId);
             if (!user) {
                 res.status(400).json({ message: 'Assigned user not found' });
                 return;
             }
-            assignedTo.name = user.name;
+            cleanAssignedTo.userId = assignedTo.userId;
+            cleanAssignedTo.name = user.name;
         }
-        // Create device
-        const device = await Device_1.default.create({
-            deviceId,
-            vehicleNumber,
+        // Clean up location data
+        const cleanLocation = {
+            latitude: (location === null || location === void 0 ? void 0 : location.latitude) || 6.9271, // Default to Colombo
+            longitude: (location === null || location === void 0 ? void 0 : location.longitude) || 79.8612,
+            address: ((_a = location === null || location === void 0 ? void 0 : location.address) === null || _a === void 0 ? void 0 : _a.trim()) || 'Address not provided',
+            lastUpdated: new Date()
+        };
+        // Prepare device data
+        const deviceData = {
+            deviceId: deviceId.trim(),
+            vehicleNumber: vehicleNumber.trim(),
             vehicleType,
-            assignedTo,
-            firmwareVersion,
+            assignedTo: cleanAssignedTo,
+            firmwareVersion: firmwareVersion.trim(),
             installDate,
-            location: location || {
-                latitude: 0,
-                longitude: 0,
-                address: 'Not set',
-                lastUpdated: new Date()
-            },
+            location: cleanLocation,
             status: 'offline',
             batteryLevel: 100,
             signalStrength: 0,
@@ -162,7 +156,16 @@ const createDevice = async (req, res) => {
                 count: 0,
                 messages: []
             }
-        });
+        };
+        // Only add route if provided
+        if ((route === null || route === void 0 ? void 0 : route.routeId) && (route === null || route === void 0 ? void 0 : route.name)) {
+            deviceData.route = {
+                routeId: route.routeId,
+                name: route.name
+            };
+        }
+        // Create device
+        const device = await Device_1.default.create(deviceData);
         res.status(201).json({
             message: 'Device created successfully',
             device
@@ -170,10 +173,24 @@ const createDevice = async (req, res) => {
     }
     catch (error) {
         console.error('Create device error:', error);
-        res.status(500).json({
-            message: 'Server error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
+        // Better error handling
+        if (error.name === 'ValidationError') {
+            const validationErrors = Object.values(error.errors).map((err) => err.message);
+            res.status(400).json({
+                message: 'Validation error',
+                errors: validationErrors,
+                details: error.message
+            });
+        }
+        else if (error.code === 11000) {
+            res.status(400).json({ message: 'Device with this ID already exists' });
+        }
+        else {
+            res.status(500).json({
+                message: 'Server error',
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
     }
 };
 exports.createDevice = createDevice;
@@ -221,7 +238,7 @@ const updateDevice = async (req, res) => {
         if (installDate)
             device.installDate = installDate;
         if (location)
-            device.location = { ...device.location, ...location };
+            device.location = { ...(device.location || {}), ...location };
         if (status)
             device.status = status;
         if (isActive !== undefined)

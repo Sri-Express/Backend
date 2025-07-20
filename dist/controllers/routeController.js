@@ -18,47 +18,26 @@ const getRoutes = async (req, res) => {
         const skip = (pageNum - 1) * limitNum;
         // Build filter query
         const filter = { isActive: true };
-        if (status && status !== 'all') {
+        if (status && status !== 'all')
             filter.status = status;
-        }
-        if (vehicleType) {
+        if (vehicleType)
             filter['vehicleInfo.type'] = vehicleType;
-        }
-        if (startLocation) {
+        if (startLocation)
             filter['startLocation.name'] = new RegExp(startLocation, 'i');
-        }
-        if (endLocation) {
+        if (endLocation)
             filter['endLocation.name'] = new RegExp(endLocation, 'i');
-        }
         // Build sort object
         const sortObject = {};
         sortObject[sortBy] = sortOrder === 'desc' ? -1 : 1;
         // Get routes with pagination
-        const routes = await Route_1.default.find(filter)
-            .populate('operatorInfo.fleetId', 'companyName status')
-            .sort(sortObject)
-            .skip(skip)
-            .limit(limitNum);
-        // Get total count for pagination
+        const routes = await Route_1.default.find(filter).populate('operatorInfo.fleetId', 'companyName status').sort(sortObject).skip(skip).limit(limitNum);
         const totalRoutes = await Route_1.default.countDocuments(filter);
         const totalPages = Math.ceil(totalRoutes / limitNum);
-        res.json({
-            routes,
-            pagination: {
-                currentPage: pageNum,
-                totalPages,
-                totalRoutes,
-                hasNextPage: pageNum < totalPages,
-                hasPrevPage: pageNum > 1
-            }
-        });
+        res.json({ routes, pagination: { currentPage: pageNum, totalPages, totalRoutes, hasNextPage: pageNum < totalPages, hasPrevPage: pageNum > 1 } });
     }
     catch (error) {
         console.error('Get routes error:', error);
-        res.status(500).json({
-            message: 'Server error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
+        res.status(500).json({ message: 'Server error', error: error instanceof Error ? error.message : 'Unknown error' });
     }
 };
 exports.getRoutes = getRoutes;
@@ -73,62 +52,33 @@ const searchRoutes = async (req, res) => {
             return;
         }
         // Build search query
-        const searchQuery = {
-            isActive: true,
-            status: 'active',
-            $or: [
-                {
-                    'startLocation.name': new RegExp(from, 'i'),
-                    'endLocation.name': new RegExp(to, 'i')
-                },
-                {
-                    'waypoints.name': new RegExp(from, 'i'),
-                    'endLocation.name': new RegExp(to, 'i')
-                },
-                {
-                    'startLocation.name': new RegExp(from, 'i'),
-                    'waypoints.name': new RegExp(to, 'i')
-                }
-            ]
-        };
-        if (vehicleType) {
+        const searchQuery = { isActive: true, status: 'active', $or: [
+                { 'startLocation.name': new RegExp(from, 'i'), 'endLocation.name': new RegExp(to, 'i') },
+                { 'waypoints.name': new RegExp(from, 'i'), 'endLocation.name': new RegExp(to, 'i') },
+                { 'startLocation.name': new RegExp(from, 'i'), 'waypoints.name': new RegExp(to, 'i') }
+            ] };
+        if (vehicleType)
             searchQuery['vehicleInfo.type'] = vehicleType;
-        }
-        if (maxPrice) {
+        if (maxPrice)
             searchQuery['pricing.basePrice'] = { $lte: parseInt(maxPrice) };
-        }
         // Get routes
-        const routes = await Route_1.default.find(searchQuery)
-            .populate('operatorInfo.fleetId', 'companyName contactNumber status')
-            .sort({ 'pricing.basePrice': 1 });
+        const routes = await Route_1.default.find(searchQuery).populate('operatorInfo.fleetId', 'companyName contactNumber status').sort({ 'pricing.basePrice': 1 });
         // Filter schedules based on date if provided
         const routesWithSchedules = routes.map(route => {
             let filteredSchedules = route.schedules.filter(schedule => schedule.isActive);
             if (date) {
                 const searchDate = new Date(date);
-                const dayOfWeek = searchDate.toLocaleDateString('en-US', { weekday: 'lowercase' });
+                const dayOfWeek = searchDate.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
                 filteredSchedules = filteredSchedules.filter(schedule => schedule.daysOfWeek.includes(dayOfWeek));
             }
-            return {
-                ...route.toObject(),
-                schedules: filteredSchedules,
-                availableSchedules: filteredSchedules.length
-            };
+            return { ...route.toObject(), schedules: filteredSchedules, availableSchedules: filteredSchedules.length };
         });
-        // Filter out routes with no available schedules
         const availableRoutes = routesWithSchedules.filter(route => route.availableSchedules > 0);
-        res.json({
-            routes: availableRoutes,
-            searchParams: { from, to, date, vehicleType },
-            totalResults: availableRoutes.length
-        });
+        res.json({ routes: availableRoutes, searchParams: { from, to, date, vehicleType }, totalResults: availableRoutes.length });
     }
     catch (error) {
         console.error('Search routes error:', error);
-        res.status(500).json({
-            message: 'Server error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
+        res.status(500).json({ message: 'Server error', error: error instanceof Error ? error.message : 'Unknown error' });
     }
 };
 exports.searchRoutes = searchRoutes;
@@ -138,31 +88,17 @@ exports.searchRoutes = searchRoutes;
 const getRouteById = async (req, res) => {
     try {
         const { id } = req.params;
-        const route = await Route_1.default.findById(id)
-            .populate('operatorInfo.fleetId', 'companyName contactNumber status documents');
+        const route = await Route_1.default.findById(id).populate('operatorInfo.fleetId', 'companyName contactNumber status documents');
         if (!route) {
             res.status(404).json({ message: 'Route not found' });
             return;
         }
-        // Get next departures
         const nextDepartures = route.getNextDepartures(10);
-        res.json({
-            route,
-            nextDepartures,
-            pricing: {
-                regular: route.calculatePrice('regular'),
-                student: route.calculatePrice('student'),
-                senior: route.calculatePrice('senior'),
-                military: route.calculatePrice('military')
-            }
-        });
+        res.json({ route, nextDepartures, pricing: { regular: route.calculatePrice('regular'), student: route.calculatePrice('student'), senior: route.calculatePrice('senior'), military: route.calculatePrice('military') } });
     }
     catch (error) {
         console.error('Get route by ID error:', error);
-        res.status(500).json({
-            message: 'Server error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
+        res.status(500).json({ message: 'Server error', error: error instanceof Error ? error.message : 'Unknown error' });
     }
 };
 exports.getRouteById = getRouteById;
@@ -179,35 +115,20 @@ const getRouteSchedules = async (req, res) => {
             return;
         }
         let schedules = route.schedules.filter(schedule => schedule.isActive);
-        // Filter by date if provided
         if (date) {
             const searchDate = new Date(date);
-            const dayOfWeek = searchDate.toLocaleDateString('en-US', { weekday: 'lowercase' });
+            const dayOfWeek = searchDate.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
             schedules = schedules.filter(schedule => schedule.daysOfWeek.includes(dayOfWeek));
         }
-        // Add pricing for each schedule
-        const schedulesWithPricing = schedules.map(schedule => ({
-            ...schedule.toObject(),
-            pricing: {
-                regular: route.calculatePrice('regular'),
-                student: route.calculatePrice('student'),
-                senior: route.calculatePrice('senior'),
-                military: route.calculatePrice('military')
-            }
-        }));
-        res.json({
-            routeId: route._id,
-            routeName: route.name,
-            schedules: schedulesWithPricing,
-            date: date || 'all'
+        const schedulesWithPricing = schedules.map(schedule => {
+            const scheduleObj = schedule.toObject ? schedule.toObject() : schedule;
+            return { ...scheduleObj, pricing: { regular: route.calculatePrice('regular'), student: route.calculatePrice('student'), senior: route.calculatePrice('senior'), military: route.calculatePrice('military') } };
         });
+        res.json({ routeId: route._id, routeName: route.name, schedules: schedulesWithPricing, date: date || 'all' });
     }
     catch (error) {
         console.error('Get route schedules error:', error);
-        res.status(500).json({
-            message: 'Server error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
+        res.status(500).json({ message: 'Server error', error: error instanceof Error ? error.message : 'Unknown error' });
     }
 };
 exports.getRouteSchedules = getRouteSchedules;
@@ -222,52 +143,25 @@ const getRouteRealTime = async (req, res) => {
             res.status(404).json({ message: 'Route not found' });
             return;
         }
-        // Get live vehicle locations for this route
+        // ✅ FIXED: Cast route._id to proper ObjectId type
         const liveVehicles = await LocationTracking_1.default.getRouteVehicles(route._id);
-        // Calculate average delay
         const totalDelay = liveVehicles.reduce((sum, vehicle) => sum + vehicle.operationalInfo.delays.currentDelay, 0);
         const avgDelay = liveVehicles.length > 0 ? totalDelay / liveVehicles.length : 0;
-        // Calculate service status
         let serviceStatus = 'normal';
-        if (avgDelay > 15) {
+        if (avgDelay > 15)
             serviceStatus = 'delayed';
-        }
-        else if (avgDelay > 30) {
+        else if (avgDelay > 30)
             serviceStatus = 'severely_delayed';
-        }
-        // Count vehicles by status
         const vehicleStatusCount = liveVehicles.reduce((acc, vehicle) => {
             const status = vehicle.operationalInfo.status;
             acc[status] = (acc[status] || 0) + 1;
             return acc;
         }, {});
-        res.json({
-            routeId: route._id,
-            routeName: route.name,
-            serviceStatus,
-            statistics: {
-                totalVehicles: liveVehicles.length,
-                averageDelay: Math.round(avgDelay),
-                vehicleStatusCount
-            },
-            liveVehicles: liveVehicles.map(vehicle => ({
-                vehicleId: vehicle.vehicleId,
-                vehicleNumber: vehicle.vehicleNumber,
-                location: vehicle.location,
-                progress: vehicle.routeProgress,
-                passengerLoad: vehicle.passengerLoad,
-                status: vehicle.operationalInfo.status,
-                delay: vehicle.operationalInfo.delays.currentDelay,
-                lastUpdate: vehicle.timestamp
-            }))
-        });
+        res.json({ routeId: route._id, routeName: route.name, serviceStatus, statistics: { totalVehicles: liveVehicles.length, averageDelay: Math.round(avgDelay), vehicleStatusCount }, liveVehicles: liveVehicles.map((vehicle) => ({ vehicleId: vehicle.vehicleId, vehicleNumber: vehicle.vehicleNumber, location: vehicle.location, progress: vehicle.routeProgress, passengerLoad: vehicle.passengerLoad, status: vehicle.operationalInfo.status, delay: vehicle.operationalInfo.delays.currentDelay, lastUpdate: vehicle.timestamp })) });
     }
     catch (error) {
         console.error('Get route real-time error:', error);
-        res.status(500).json({
-            message: 'Server error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
+        res.status(500).json({ message: 'Server error', error: error instanceof Error ? error.message : 'Unknown error' });
     }
 };
 exports.getRouteRealTime = getRouteRealTime;
@@ -277,45 +171,22 @@ exports.getRouteRealTime = getRouteRealTime;
 const createRoute = async (req, res) => {
     try {
         const { name, startLocation, endLocation, waypoints = [], distance, estimatedDuration, schedules, operatorInfo, vehicleInfo, pricing } = req.body;
-        // Validate required fields
         if (!name || !startLocation || !endLocation || !distance || !estimatedDuration || !schedules || !operatorInfo || !vehicleInfo || !pricing) {
             res.status(400).json({ message: 'Missing required fields' });
             return;
         }
-        // Verify fleet exists and is approved
         const fleet = await Fleet_1.default.findById(operatorInfo.fleetId);
         if (!fleet || fleet.status !== 'approved') {
             res.status(400).json({ message: 'Fleet not found or not approved' });
             return;
         }
-        // Create route
-        const route = new Route_1.default({
-            name,
-            startLocation,
-            endLocation,
-            waypoints,
-            distance,
-            estimatedDuration,
-            schedules,
-            operatorInfo: {
-                ...operatorInfo,
-                companyName: fleet.companyName
-            },
-            vehicleInfo,
-            pricing
-        });
+        const route = new Route_1.default({ name, startLocation, endLocation, waypoints, distance, estimatedDuration, schedules, operatorInfo: { ...operatorInfo, companyName: fleet.companyName }, vehicleInfo, pricing });
         await route.save();
-        res.status(201).json({
-            message: 'Route created successfully',
-            route
-        });
+        res.status(201).json({ message: 'Route created successfully', route });
     }
     catch (error) {
         console.error('Create route error:', error);
-        res.status(500).json({
-            message: 'Server error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
+        res.status(500).json({ message: 'Server error', error: error instanceof Error ? error.message : 'Unknown error' });
     }
 };
 exports.createRoute = createRoute;
@@ -331,17 +202,11 @@ const updateRoute = async (req, res) => {
             res.status(404).json({ message: 'Route not found' });
             return;
         }
-        res.json({
-            message: 'Route updated successfully',
-            route
-        });
+        res.json({ message: 'Route updated successfully', route });
     }
     catch (error) {
         console.error('Update route error:', error);
-        res.status(500).json({
-            message: 'Server error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
+        res.status(500).json({ message: 'Server error', error: error instanceof Error ? error.message : 'Unknown error' });
     }
 };
 exports.updateRoute = updateRoute;
@@ -356,17 +221,11 @@ const deleteRoute = async (req, res) => {
             res.status(404).json({ message: 'Route not found' });
             return;
         }
-        res.json({
-            message: 'Route deleted successfully',
-            route
-        });
+        res.json({ message: 'Route deleted successfully', route });
     }
     catch (error) {
         console.error('Delete route error:', error);
-        res.status(500).json({
-            message: 'Server error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
+        res.status(500).json({ message: 'Server error', error: error instanceof Error ? error.message : 'Unknown error' });
     }
 };
 exports.deleteRoute = deleteRoute;
@@ -378,47 +237,20 @@ const getRouteStats = async (req, res) => {
         const totalRoutes = await Route_1.default.countDocuments({ isActive: true });
         const activeRoutes = await Route_1.default.countDocuments({ isActive: true, status: 'active' });
         const inactiveRoutes = await Route_1.default.countDocuments({ isActive: true, status: 'inactive' });
-        // Get routes by vehicle type
         const routesByType = await Route_1.default.aggregate([
             { $match: { isActive: true } },
-            {
-                $group: {
-                    _id: '$vehicleInfo.type',
-                    count: { $sum: 1 },
-                    avgPrice: { $avg: '$pricing.basePrice' },
-                    avgDistance: { $avg: '$distance' }
-                }
-            }
+            { $group: { _id: '$vehicleInfo.type', count: { $sum: 1 }, avgPrice: { $avg: '$pricing.basePrice' }, avgDistance: { $avg: '$distance' } } }
         ]);
-        // Get top operators
         const topOperators = await Route_1.default.aggregate([
             { $match: { isActive: true, status: 'active' } },
-            {
-                $group: {
-                    _id: '$operatorInfo.companyName',
-                    routeCount: { $sum: 1 },
-                    totalDistance: { $sum: '$distance' }
-                }
-            },
-            { $sort: { routeCount: -1 } },
-            { $limit: 10 }
+            { $group: { _id: '$operatorInfo.companyName', routeCount: { $sum: 1 }, totalDistance: { $sum: '$distance' } } },
+            { $sort: { routeCount: -1 } }, { $limit: 10 }
         ]);
-        res.json({
-            overview: {
-                totalRoutes,
-                activeRoutes,
-                inactiveRoutes
-            },
-            routesByType,
-            topOperators
-        });
+        res.json({ overview: { totalRoutes, activeRoutes, inactiveRoutes }, routesByType, topOperators });
     }
     catch (error) {
         console.error('Get route stats error:', error);
-        res.status(500).json({
-            message: 'Server error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
+        res.status(500).json({ message: 'Server error', error: error instanceof Error ? error.message : 'Unknown error' });
     }
 };
 exports.getRouteStats = getRouteStats;

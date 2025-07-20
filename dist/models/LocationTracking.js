@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-// src/models/LocationTracking.ts
+// src/models/LocationTracking.ts - FIXED VERSION WITH STATIC METHODS
 const mongoose_1 = __importStar(require("mongoose"));
 const LocationTrackingSchema = new mongoose_1.Schema({
     deviceId: {
@@ -245,21 +245,19 @@ LocationTrackingSchema.pre('save', function (next) {
     }
     next();
 });
-// Method to check if vehicle is delayed
+// Instance Methods
 LocationTrackingSchema.methods.isDelayed = function (thresholdMinutes = 5) {
     return this.operationalInfo.delays.currentDelay >= thresholdMinutes;
 };
-// Method to get estimated arrival time
 LocationTrackingSchema.methods.getEstimatedArrival = function () {
     const baseETA = new Date(this.operationalInfo.tripInfo.estimatedArrival);
     const delayMs = this.operationalInfo.delays.currentDelay * 60 * 1000;
     return new Date(baseETA.getTime() + delayMs);
 };
-// Method to check if vehicle is near capacity
 LocationTrackingSchema.methods.isNearCapacity = function (threshold = 80) {
     return this.passengerLoad.loadPercentage >= threshold;
 };
-// Static method to get real-time locations for a route
+// Static Methods - ⭐ ADDED THE MISSING METHODS!
 LocationTrackingSchema.statics.getRouteVehicles = async function (routeId) {
     return this.find({
         routeId,
@@ -272,7 +270,6 @@ LocationTrackingSchema.statics.getRouteVehicles = async function (routeId) {
         .populate('deviceId', 'deviceId vehicleNumber status')
         .populate('routeId', 'name startLocation endLocation');
 };
-// Static method to get latest location for a vehicle
 LocationTrackingSchema.statics.getLatestLocation = async function (vehicleId) {
     return this.findOne({
         vehicleId,
@@ -281,7 +278,6 @@ LocationTrackingSchema.statics.getLatestLocation = async function (vehicleId) {
         .sort({ timestamp: -1 })
         .populate('routeId', 'name startLocation endLocation waypoints');
 };
-// Static method to get vehicles by area
 LocationTrackingSchema.statics.getVehiclesByArea = async function (bounds) {
     return this.find({
         isActive: true,
@@ -300,7 +296,6 @@ LocationTrackingSchema.statics.getVehiclesByArea = async function (bounds) {
         .sort({ timestamp: -1 })
         .populate('routeId', 'name startLocation endLocation');
 };
-// Static method to get tracking statistics
 LocationTrackingSchema.statics.getTrackingStats = async function () {
     const stats = await this.aggregate([
         {

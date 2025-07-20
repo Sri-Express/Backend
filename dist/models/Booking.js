@@ -33,12 +33,12 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-// src/models/Booking.ts
+// src/models/Booking.ts - FIXED VERSION - Remove required from auto-generated fields
 const mongoose_1 = __importStar(require("mongoose"));
 const BookingSchema = new mongoose_1.Schema({
     bookingId: {
         type: String,
-        required: true,
+        // ✅ FIXED: Remove required - this is auto-generated
         unique: true,
     },
     userId: {
@@ -169,7 +169,7 @@ const BookingSchema = new mongoose_1.Schema({
     },
     qrCode: {
         type: String,
-        required: true,
+        // ✅ FIXED: Remove required - this is auto-generated
     },
     cancellationInfo: {
         reason: {
@@ -219,8 +219,26 @@ BookingSchema.index({ status: 1 });
 BookingSchema.index({ 'paymentInfo.status': 1 });
 BookingSchema.index({ isActive: 1 });
 BookingSchema.index({ createdAt: 1 });
-// Generate bookingId and QR code before saving
+// ✅ FIXED: Enhanced pre-save middleware to ensure fields are set before validation
+BookingSchema.pre('validate', function (next) {
+    // Generate bookingId before validation if not present
+    if (!this.bookingId) {
+        this.bookingId = `BK${Date.now()}${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+    }
+    // Generate QR code before validation if not present
+    if (!this.qrCode) {
+        this.qrCode = this.bookingId;
+    }
+    // ✅ FIXED: Auto-calculate pricing if not provided
+    if (!this.pricing.totalAmount && this.pricing.basePrice) {
+        this.pricing.taxes = Math.round(this.pricing.basePrice * 0.02);
+        this.pricing.totalAmount = this.pricing.basePrice + this.pricing.taxes - this.pricing.discounts;
+    }
+    next();
+});
+// Keep the original pre-save as backup
 BookingSchema.pre('save', function (next) {
+    // Double-check that required fields are set
     if (!this.bookingId) {
         this.bookingId = `BK${Date.now()}${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
     }
@@ -229,7 +247,7 @@ BookingSchema.pre('save', function (next) {
     }
     next();
 });
-// Calculate refund amount method
+// Instance Methods
 BookingSchema.methods.calculateRefund = function () {
     const hoursUntilDeparture = this.getHoursUntilDeparture();
     let refundPercentage = 0;
@@ -244,26 +262,23 @@ BookingSchema.methods.calculateRefund = function () {
     }
     return Math.round(this.pricing.totalAmount * (refundPercentage / 100));
 };
-// Get hours until departure
 BookingSchema.methods.getHoursUntilDeparture = function () {
     const departureDateTime = new Date(`${this.travelDate.toISOString().split('T')[0]}T${this.departureTime}:00`);
     const now = new Date();
     const diffMs = departureDateTime.getTime() - now.getTime();
     return Math.max(0, diffMs / (1000 * 60 * 60));
 };
-// Check if booking can be cancelled
 BookingSchema.methods.canBeCancelled = function () {
     const validStatuses = ['confirmed', 'pending'];
     const hasMinimumTime = this.getHoursUntilDeparture() > 0.5; // At least 30 minutes before departure
     return validStatuses.includes(this.status) && hasMinimumTime;
 };
-// Check if booking can be modified
 BookingSchema.methods.canBeModified = function () {
     const validStatuses = ['confirmed', 'pending'];
     const hasMinimumTime = this.getHoursUntilDeparture() > 2; // At least 2 hours before departure
     return validStatuses.includes(this.status) && hasMinimumTime;
 };
-// Static method to get booking statistics
+// Static Methods
 BookingSchema.statics.getBookingStats = async function (userId) {
     const matchQuery = { isActive: true };
     if (userId)
@@ -280,7 +295,6 @@ BookingSchema.statics.getBookingStats = async function (userId) {
     ]);
     return stats;
 };
-// Static method to get popular routes
 BookingSchema.statics.getPopularRoutes = async function (limit = 10) {
     return this.aggregate([
         { $match: { isActive: true, status: { $in: ['confirmed', 'completed'] } } },

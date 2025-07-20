@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-// src/models/Route.ts
+// src/models/Route.ts - COMPLETELY FIXED VERSION
 const mongoose_1 = __importStar(require("mongoose"));
 const RouteSchema = new mongoose_1.Schema({
     routeId: {
@@ -207,10 +207,11 @@ RouteSchema.methods.calculatePrice = function (passengerType = 'regular') {
     }
     return Math.round(totalPrice);
 };
-// Get next departures method
+// Get next departures method - FIXED THE ISSUES! ⭐
 RouteSchema.methods.getNextDepartures = function (limit = 5) {
     const now = new Date();
-    const currentDay = now.toLocaleLString('en-US', { weekday: 'lowercase' });
+    // FIX: Get day name properly
+    const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase(); // ✅ FIXED
     const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
     return this.schedules
         .filter((schedule) => schedule.isActive &&

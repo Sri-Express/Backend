@@ -33,12 +33,12 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-// src/models/Payment.ts
+// src/models/Payment.ts - FIXED VERSION - Auto-generate paymentId
 const mongoose_1 = __importStar(require("mongoose"));
 const PaymentSchema = new mongoose_1.Schema({
     paymentId: {
         type: String,
-        required: true,
+        // ✅ FIXED: Remove required - this is auto-generated
         unique: true,
     },
     userId: {
@@ -89,7 +89,8 @@ const PaymentSchema = new mongoose_1.Schema({
     paymentMethod: {
         type: {
             type: String,
-            enum: ['card', 'bank_transfer', 'digital_wallet', 'cash'],
+            // ✅ FIXED: Include 'bank' in enum for frontend compatibility
+            enum: ['card', 'bank', 'bank_transfer', 'digital_wallet', 'cash'],
             required: true,
         },
         provider: {
@@ -124,6 +125,9 @@ const PaymentSchema = new mongoose_1.Schema({
         },
         merchantId: {
             type: String,
+        },
+        gatewayResponse: {
+            type: mongoose_1.Schema.Types.Mixed,
         }
     },
     status: {
@@ -254,8 +258,21 @@ PaymentSchema.index({ isActive: 1 });
 // Compound indexes for common queries
 PaymentSchema.index({ userId: 1, status: 1 });
 PaymentSchema.index({ status: 1, 'timestamps.initiatedAt': -1 });
-// Generate paymentId before saving
+// ✅ FIXED: Add pre('validate') middleware to run BEFORE validation
+PaymentSchema.pre('validate', function (next) {
+    // Generate paymentId before validation if not present
+    if (!this.paymentId) {
+        this.paymentId = `PAY${Date.now()}${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+    }
+    // ✅ FIXED: Map 'bank' to 'bank_transfer' for internal consistency
+    if (this.paymentMethod && this.paymentMethod.type === 'bank') {
+        this.paymentMethod.type = 'bank_transfer';
+    }
+    next();
+});
+// Keep the original pre-save as backup
 PaymentSchema.pre('save', function (next) {
+    // Double-check that paymentId is set
     if (!this.paymentId) {
         this.paymentId = `PAY${Date.now()}${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
     }
@@ -269,7 +286,7 @@ PaymentSchema.pre('save', function (next) {
     }
     next();
 });
-// Method to update status with history tracking
+// Instance Methods
 PaymentSchema.methods.updateStatus = function (newStatus, reason, updatedBy) {
     this.status = newStatus;
     this.statusHistory.push({
@@ -296,7 +313,6 @@ PaymentSchema.methods.updateStatus = function (newStatus, reason, updatedBy) {
     }
     return this.save();
 };
-// Method to process refund
 PaymentSchema.methods.processRefund = function (refundAmount, reason, processedBy, refundMethod = 'original_method') {
     const refundId = `REF${Date.now()}${Math.floor(Math.random() * 1000)}`;
     this.refundInfo = {
@@ -311,7 +327,6 @@ PaymentSchema.methods.processRefund = function (refundAmount, reason, processedB
     const newStatus = isPartialRefund ? 'partially_refunded' : 'refunded';
     return this.updateStatus(newStatus, `Refund processed: ${reason}`, processedBy);
 };
-// Method to calculate processing fee
 PaymentSchema.methods.calculateProcessingFee = function () {
     let feePercentage = 0;
     switch (this.paymentMethod.type) {
@@ -330,7 +345,7 @@ PaymentSchema.methods.calculateProcessingFee = function () {
     }
     return Math.round(this.amount.subtotal * (feePercentage / 100));
 };
-// Static method to get payment statistics
+// Static Methods
 PaymentSchema.statics.getPaymentStats = async function (userId) {
     const matchQuery = { isActive: true };
     if (userId)
@@ -348,7 +363,6 @@ PaymentSchema.statics.getPaymentStats = async function (userId) {
     ]);
     return stats;
 };
-// Static method to get revenue by time period
 PaymentSchema.statics.getRevenueByPeriod = async function (startDate, endDate) {
     return this.aggregate([
         {
@@ -375,7 +389,6 @@ PaymentSchema.statics.getRevenueByPeriod = async function (startDate, endDate) {
         { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 } }
     ]);
 };
-// Static method to get payment method usage
 PaymentSchema.statics.getPaymentMethodStats = async function () {
     return this.aggregate([
         { $match: { status: 'completed' } },
