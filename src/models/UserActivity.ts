@@ -1,5 +1,5 @@
 // src/models/UserActivity.ts - REQUIRED MODEL FOR API TO WORK
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export interface IUserActivity extends Document {
   userId: mongoose.Types.ObjectId;
@@ -18,6 +18,22 @@ export interface IUserActivity extends Document {
   timestamp: Date;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// --- NEW: Interface for the static method ---
+export interface IUserActivityModel extends Model<IUserActivity> {
+  logActivity(
+    userId: mongoose.Types.ObjectId,
+    action: string,
+    description: string,
+    options?: {
+      ipAddress?: string;
+      userAgent?: string;
+      category?: string;
+      severity?: 'low' | 'medium' | 'high' | 'critical';
+      metadata?: Record<string, any>;
+    }
+  ): Promise<void>;
 }
 
 const UserActivitySchema: Schema = new Schema({
@@ -51,6 +67,10 @@ const UserActivitySchema: Schema = new Schema({
       'user_status_changed',
       'users_list_view',
       'user_details_view',
+      'user_stats_view',
+      'user_activity_view',
+      'user_timeline_view',
+      'user_status_toggle',
       
       // Device actions
       'device_created',
@@ -153,6 +173,39 @@ UserActivitySchema.index({ userId: 1, action: 1, timestamp: -1 });
 UserActivitySchema.index({ category: 1, timestamp: -1 });
 UserActivitySchema.index({ action: 1, timestamp: -1 });
 
-const UserActivity = mongoose.model<IUserActivity>('UserActivity', UserActivitySchema);
+// --- NEW: Static method to log activity ---
+UserActivitySchema.statics.logActivity = async function(
+  userId: mongoose.Types.ObjectId,
+  action: string,
+  description: string,
+  options: {
+    ipAddress?: string;
+    userAgent?: string;
+    category?: string;
+    severity?: 'low' | 'medium' | 'high' | 'critical';
+    metadata?: Record<string, any>;
+  } = {}
+) {
+  try {
+    const activity = new this({
+      userId,
+      action,
+      description,
+      ipAddress: options.ipAddress || 'unknown',
+      userAgent: options.userAgent || 'unknown',
+      category: options.category || 'other',
+      severity: options.severity || 'low',
+      details: options.metadata || {},
+      metadata: options.metadata || {} // Also saving to metadata for consistency
+    });
+    await activity.save();
+  } catch (error) {
+    console.error('Failed to log user activity:', error);
+    // Do not re-throw error to prevent crashing the main application flow
+  }
+};
+
+
+const UserActivity = mongoose.model<IUserActivity, IUserActivityModel>('UserActivity', UserActivitySchema);
 
 export default UserActivity;

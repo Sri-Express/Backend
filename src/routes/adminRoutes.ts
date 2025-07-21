@@ -1,5 +1,7 @@
 // src/routes/adminRoutes.ts - FIXED ADMIN ROUTES WITH GPS SIMULATION
-import express from 'express'; import { requireSystemAdmin } from '../middleware/adminMiddleware';
+import express from 'express';
+import { requireSystemAdmin } from '../middleware/adminMiddleware';
+import Emergency from '../models/Emergency'; // Assuming Emergency model path
 
 // User management controllers
 import { getAllUsers, getUserById, createUser, updateUser, deleteUser, toggleUserStatus, getUserStats, getUserStatistics, getUserActivity, getUserTimeline } from '../controllers/adminUserController';
@@ -46,6 +48,41 @@ router.get('/system/audit', async (req, res) => { try { res.json({ message: 'Sys
 // ============================
 router.get('/emergency', getEmergencyDashboard); router.post('/emergency/alert', createEmergencyAlert); router.get('/emergency/incidents', getAllIncidents); router.post('/emergency/broadcast', sendEmergencyBroadcast); router.get('/emergency/teams', getEmergencyTeams); router.put('/emergency/:id/resolve', resolveEmergency);
 
+// Add this route for users to get their alerts
+router.get('/emergency/user-alerts', async (req, res) => {
+  try {
+    // Get recent emergency alerts that should be visible to users
+    const alerts = await Emergency.find({
+      isActive: true,
+      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Last 24 hours
+      $or: [
+        { priority: { $in: ['critical', 'high', 'medium'] } },
+        { type: 'broadcast' }
+      ]
+    })
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .select('incidentId title description type priority createdAt location');
+
+    // Transform to alert format
+    const formattedAlerts = alerts.map(emergency => ({
+      id: `emergency_${emergency._id}`,
+      type: emergency.type === 'system' ? 'broadcast' : 'emergency_created',
+      title: emergency.title,
+      message: emergency.description,
+      priority: emergency.priority,
+      timestamp: emergency.createdAt,
+      recipients: emergency.priority === 'low' ? ['admins'] : ['all'],
+      emergency: emergency,
+      read: false
+    }));
+
+    res.json({ alerts: formattedAlerts });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: (error as Error).message });
+  }
+});
+
 // ============================
 // GPS SIMULATION ROUTES
 // ============================
@@ -75,7 +112,7 @@ router.post('/ai/:moduleId/train', async (req, res) => { try { const { moduleId 
 // ============================
 // UTILITY ROUTES
 // ============================
-router.post('/test/activity', async (req, res) => { try { res.json({ message: 'Activity logging test endpoint', user: req.user?.name, logged: true, timestamp: new Date().toISOString() }); } catch (error) { res.status(500).json({ message: 'Server error' }); } });
+router.post('/test/activity', async (req, res) => { try { res.json({ message: 'Activity logging test endpoint', user: (req as any).user?.name, logged: true, timestamp: new Date().toISOString() }); } catch (error) { res.status(500).json({ message: 'Server error' }); } });
 
 router.get('/docs', (req, res) => { 
   res.json({ 
@@ -88,7 +125,7 @@ router.get('/docs', (req, res) => {
       fleet: 'Fleet management endpoints (12 total)',
       simulation: 'GPS simulation endpoints (8 total)',
       ai: 'AI module endpoints (3 total)',
-      emergency: 'Emergency management endpoints (6 total)',
+      emergency: 'Emergency management endpoints (7 total)',
       analytics: 'Analytics and reporting endpoints (5 total)'
     },
     totalEndpoints: '60+',

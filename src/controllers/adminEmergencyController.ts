@@ -1,9 +1,11 @@
-// src/controllers/adminEmergencyController.ts
+// src/controllers/adminEmergencyController.ts - Enhanced with Real-time Notifications
 import { Request, Response } from 'express';
 import Emergency from '../models/Emergency';
 import Device from '../models/Device';
 import User from '../models/User';
 import mongoose from 'mongoose';
+import { getRealTimeEmergencyService } from '../services/realTimeEmergencyService';
+import sendEmail from '../utils/sendEmail';
 
 // Emergency team interface
 interface EmergencyTeam {
@@ -17,7 +19,19 @@ interface EmergencyTeam {
   }[];
 }
 
-// @desc    Get emergency dashboard data
+// SMS Service (mock implementation - replace with actual SMS service)
+const sendSMS = async (phoneNumber: string, message: string): Promise<void> => {
+  console.log(`📱 SMS to ${phoneNumber}: ${message}`);
+  // Integrate with actual SMS service like Twilio, AWS SNS, etc.
+};
+
+// Push Notification Service (mock implementation)
+const sendPushNotification = async (userId: string, title: string, body: string, data?: any): Promise<void> => {
+  console.log(`🔔 Push notification to user ${userId}: ${title} - ${body}`);
+  // Integrate with actual push service like Firebase, OneSignal, etc.
+};
+
+// @desc    Get emergency dashboard data with real-time integration
 // @route   GET /api/admin/emergency
 // @access  Private (System Admin)
 export const getEmergencyDashboard = async (req: Request, res: Response): Promise<void> => {
@@ -152,6 +166,18 @@ export const getEmergencyDashboard = async (req: Request, res: Response): Promis
       return acc;
     }, {});
 
+    // Get real-time connection status
+    let realTimeStatus = { connectedUsers: 0, websocketActive: false };
+    try {
+      const realTimeService = getRealTimeEmergencyService();
+      realTimeStatus = {
+        connectedUsers: realTimeService.getConnectedUsersCount(),
+        websocketActive: true
+      };
+    } catch (error) {
+      console.log('Real-time service not available');
+    }
+
     const dashboardData = {
       overview: {
         totalEmergencies,
@@ -185,7 +211,8 @@ export const getEmergencyDashboard = async (req: Request, res: Response): Promis
         })
       },
       recentEmergencies,
-      criticalEmergencies
+      criticalEmergencies,
+      realTimeStatus // Add real-time status to dashboard
     };
 
     res.json(dashboardData);
@@ -198,7 +225,7 @@ export const getEmergencyDashboard = async (req: Request, res: Response): Promis
   }
 };
 
-// @desc    Create emergency alert
+// @desc    Create emergency alert with real-time notifications
 // @route   POST /api/admin/emergency/alert
 // @access  Private (System Admin)
 export const createEmergencyAlert = async (req: Request, res: Response): Promise<void> => {
@@ -288,8 +315,125 @@ export const createEmergencyAlert = async (req: Request, res: Response): Promise
       await emergency.save();
     }
 
+    console.log(`🚨 Emergency created: ${emergency.incidentId} - ${priority.toUpperCase()} priority`);
+
+    // ====== REAL-TIME NOTIFICATIONS ======
+    try {
+      const realTimeService = getRealTimeEmergencyService();
+      
+      // Send real-time notification
+      await realTimeService.notifyEmergencyCreated(emergency);
+      
+      console.log(`📡 Real-time emergency notification sent for ${emergency.incidentId}`);
+    } catch (realTimeError) {
+      console.error('Real-time notification failed:', realTimeError);
+      // Continue processing even if real-time fails
+    }
+
+    // ====== MULTI-CHANNEL NOTIFICATIONS ======
+    
+    // 1. EMAIL NOTIFICATIONS
+    if (priority === 'critical' || priority === 'high') {
+      try {
+        // Get admin users for email notification
+        const adminUsers = await User.find({
+          role: { $in: ['system_admin', 'route_admin', 'company_admin'] },
+          isActive: true
+        }).select('name email');
+
+        // Send email to each admin
+        const emailPromises = adminUsers.map(async (admin) => {
+          const emailHtml = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e4e4e4; border-radius: 8px;">
+              <div style="text-align: center; margin-bottom: 20px;">
+                <h1 style="color: #dc2626; margin-bottom: 5px;">🚨 EMERGENCY ALERT</h1>
+                <p style="color: #5f6368; font-size: 16px;">${priority.toUpperCase()} Priority Incident</p>
+              </div>
+              
+              <div style="border-top: 2px solid #dc2626; border-bottom: 2px solid #dc2626; padding: 20px 0; margin-bottom: 20px;">
+                <h2 style="color: #dc2626; margin-bottom: 15px;">${title}</h2>
+                <p style="margin-bottom: 15px;"><strong>Incident ID:</strong> ${emergency.incidentId}</p>
+                <p style="margin-bottom: 15px;"><strong>Type:</strong> ${type.charAt(0).toUpperCase() + type.slice(1)}</p>
+                <p style="margin-bottom: 15px;"><strong>Location:</strong> ${location.address}</p>
+                <p style="margin-bottom: 15px;"><strong>Description:</strong> ${description}</p>
+                <p style="margin-bottom: 15px;"><strong>Reported by:</strong> ${reportedBy.name} (${reportedBy.role})</p>
+                <p style="margin-bottom: 0;"><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+              </div>
+              
+              <div style="color: #5f6368; font-size: 13px;">
+                <p>This is an automated emergency alert from Sri Express Emergency Management System.</p>
+                <p style="margin-top: 15px;">© ${new Date().getFullYear()} Sri Express. All rights reserved.</p>
+              </div>
+            </div>
+          `;
+
+          return sendEmail({
+            email: admin.email,
+            subject: `🚨 ${priority.toUpperCase()} EMERGENCY: ${title}`,
+            html: emailHtml
+          });
+        });
+
+        await Promise.all(emailPromises);
+        console.log(`📧 Email notifications sent to ${adminUsers.length} administrators`);
+      } catch (emailError) {
+        console.error('Email notification failed:', emailError);
+      }
+    }
+
+    // 2. SMS NOTIFICATIONS (for critical emergencies)
+    if (priority === 'critical') {
+      try {
+        const adminUsers = await User.find({
+          role: 'system_admin',
+          isActive: true,
+          phone: { $exists: true, $ne: null }
+        }).select('name phone');
+
+        const smsPromises = adminUsers.map(async (admin) => {
+          if (admin.phone) {
+            const smsMessage = `🚨 CRITICAL EMERGENCY: ${title} - Location: ${location.address} - Incident: ${emergency.incidentId} - Time: ${new Date().toLocaleTimeString()}`;
+            return sendSMS(admin.phone, smsMessage);
+          }
+        });
+
+        await Promise.all(smsPromises);
+        console.log(`📱 SMS alerts sent to ${adminUsers.length} system administrators`);
+      } catch (smsError) {
+        console.error('SMS notification failed:', smsError);
+      }
+    }
+
+    // 3. PUSH NOTIFICATIONS
+    try {
+      const targetUsers = await User.find({
+        role: { $in: priority === 'critical' ? ['system_admin', 'route_admin', 'company_admin', 'client'] : ['system_admin', 'route_admin', 'company_admin'] },
+        isActive: true
+      }).select('_id name');
+
+      const pushPromises = targetUsers.map(async (user) => {
+        return sendPushNotification(
+          user._id.toString(),
+          `🚨 ${priority.toUpperCase()} Emergency`,
+          `${title} - ${location.address}`,
+          {
+            emergencyId: (emergency._id as any)?.toString() || '',
+            incidentId: emergency.incidentId,
+            priority: priority,
+            type: type
+          }
+        );
+      });
+
+      await Promise.all(pushPromises);
+      console.log(`🔔 Push notifications sent to ${targetUsers.length} users`);
+    } catch (pushError) {
+      console.error('Push notification failed:', pushError);
+    }
+
+    // Return response
     res.status(201).json({
-      message: 'Emergency alert created successfully',
+      message: 'Emergency alert created successfully with multi-channel notifications',
       emergency: {
         _id: emergency._id,
         incidentId: emergency.incidentId,
@@ -299,6 +443,12 @@ export const createEmergencyAlert = async (req: Request, res: Response): Promise
         status: emergency.status,
         location: emergency.location,
         createdAt: emergency.createdAt
+      },
+      notifications: {
+        realTime: 'sent',
+        email: priority === 'critical' || priority === 'high' ? 'sent' : 'skipped',
+        sms: priority === 'critical' ? 'sent' : 'skipped',
+        push: 'sent'
       }
     });
   } catch (error) {
@@ -393,7 +543,7 @@ export const getAllIncidents = async (req: Request, res: Response): Promise<void
   }
 };
 
-// @desc    Resolve emergency incident
+// @desc    Resolve emergency incident with real-time notifications
 // @route   PUT /api/admin/emergency/:id/resolve
 // @access  Private (System Admin)
 export const resolveEmergency = async (req: Request, res: Response): Promise<void> => {
@@ -427,6 +577,9 @@ export const resolveEmergency = async (req: Request, res: Response): Promise<voi
       return;
     }
 
+    // Store old priority for notification purposes
+    const oldPriority = emergency.priority;
+
     // Prepare resolution data
     const resolutionData = {
       resolvedBy: {
@@ -454,8 +607,68 @@ export const resolveEmergency = async (req: Request, res: Response): Promise<voi
       `Emergency resolved using ${resolutionMethod}. ${resolutionNotes}`
     );
 
+    console.log(`✅ Emergency resolved: ${emergency.incidentId}`);
+
+    // ====== REAL-TIME NOTIFICATIONS FOR RESOLUTION ======
+    try {
+      const realTimeService = getRealTimeEmergencyService();
+      
+      // Send real-time resolution notification
+      await realTimeService.notifyEmergencyResolved(emergency);
+      
+      console.log(`📡 Real-time resolution notification sent for ${emergency.incidentId}`);
+    } catch (realTimeError) {
+      console.error('Real-time resolution notification failed:', realTimeError);
+    }
+
+    // ====== EMAIL NOTIFICATION FOR HIGH/CRITICAL RESOLUTIONS ======
+    if (oldPriority === 'critical' || oldPriority === 'high') {
+      try {
+        const adminUsers = await User.find({
+          role: { $in: ['system_admin', 'route_admin', 'company_admin'] },
+          isActive: true
+        }).select('name email');
+
+        const emailPromises = adminUsers.map(async (admin) => {
+          const emailHtml = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e4e4e4; border-radius: 8px;">
+              <div style="text-align: center; margin-bottom: 20px;">
+                <h1 style="color: #10b981; margin-bottom: 5px;">✅ EMERGENCY RESOLVED</h1>
+                <p style="color: #5f6368; font-size: 16px;">${oldPriority.toUpperCase()} Priority Incident Closed</p>
+              </div>
+              
+              <div style="border-top: 2px solid #10b981; border-bottom: 2px solid #10b981; padding: 20px 0; margin-bottom: 20px;">
+                <h2 style="color: #10b981; margin-bottom: 15px;">${emergency.title}</h2>
+                <p style="margin-bottom: 15px;"><strong>Incident ID:</strong> ${emergency.incidentId}</p>
+                <p style="margin-bottom: 15px;"><strong>Resolution Method:</strong> ${resolutionMethod}</p>
+                <p style="margin-bottom: 15px;"><strong>Notes:</strong> ${resolutionNotes}</p>
+                <p style="margin-bottom: 15px;"><strong>Resolved by:</strong> ${req.user!.name} (${req.user!.role})</p>
+                <p style="margin-bottom: 0;"><strong>Resolution Time:</strong> ${new Date().toLocaleString()}</p>
+              </div>
+              
+              <div style="color: #5f6368; font-size: 13px;">
+                <p>This emergency has been successfully resolved and closed.</p>
+                <p style="margin-top: 15px;">© ${new Date().getFullYear()} Sri Express. All rights reserved.</p>
+              </div>
+            </div>
+          `;
+
+          return sendEmail({
+            email: admin.email,
+            subject: `✅ RESOLVED: ${emergency.title} (${emergency.incidentId})`,
+            html: emailHtml
+          });
+        });
+
+        await Promise.all(emailPromises);
+        console.log(`📧 Resolution email notifications sent to ${adminUsers.length} administrators`);
+      } catch (emailError) {
+        console.error('Resolution email notification failed:', emailError);
+      }
+    }
+
     res.json({
-      message: 'Emergency resolved successfully',
+      message: 'Emergency resolved successfully with notifications sent',
       emergency: {
         _id: emergency._id,
         incidentId: emergency.incidentId,
@@ -473,7 +686,7 @@ export const resolveEmergency = async (req: Request, res: Response): Promise<voi
   }
 };
 
-// @desc    Send system-wide emergency broadcast
+// @desc    Send system-wide emergency broadcast with real-time delivery
 // @route   POST /api/admin/emergency/broadcast
 // @access  Private (System Admin)
 export const sendEmergencyBroadcast = async (req: Request, res: Response): Promise<void> => {
@@ -574,17 +787,87 @@ export const sendEmergencyBroadcast = async (req: Request, res: Response): Promi
       }
     }
 
-    // In a real implementation, you would integrate with actual notification services here
-    // For now, we'll simulate the broadcast
-    console.log(`Emergency Broadcast Sent:
-      Message: ${message}
-      Recipients: ${recipients} (${recipientCount} users)
-      Method: ${method}
-      Priority: ${priority}
-    `);
+    console.log(`📢 Emergency broadcast created: ${broadcast.incidentId}`);
+
+    // ====== REAL-TIME BROADCAST DELIVERY ======
+    try {
+      const realTimeService = getRealTimeEmergencyService();
+      
+      // Send real-time broadcast
+      await realTimeService.sendSystemBroadcast(message, priority, [recipients]);
+      
+      console.log(`📡 Real-time broadcast delivered to ${recipients} (${recipientCount} users)`);
+    } catch (realTimeError) {
+      console.error('Real-time broadcast failed:', realTimeError);
+    }
+
+    // ====== MULTI-CHANNEL BROADCAST DELIVERY ======
+    
+    // EMAIL BROADCAST
+    if (method === 'email' || method === 'system') {
+      try {
+        const users = await User.find(recipientQuery).select('name email');
+        
+        const emailPromises = users.map(async (user) => {
+          const emailHtml = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e4e4e4; border-radius: 8px;">
+              <div style="text-align: center; margin-bottom: 20px;">
+                <h1 style="color: #f59e0b; margin-bottom: 5px;">📢 SYSTEM BROADCAST</h1>
+                <p style="color: #5f6368; font-size: 16px;">${priority.toUpperCase()} Priority Message</p>
+              </div>
+              
+              <div style="border-top: 2px solid #f59e0b; border-bottom: 2px solid #f59e0b; padding: 20px 0; margin-bottom: 20px;">
+                <h2 style="color: #f59e0b; margin-bottom: 15px;">System-wide Announcement</h2>
+                <p style="margin-bottom: 15px; font-size: 16px; line-height: 1.6;">${message}</p>
+                <p style="margin-bottom: 15px;"><strong>Broadcast ID:</strong> ${broadcast.incidentId}</p>
+                <p style="margin-bottom: 0;"><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+              </div>
+              
+              <div style="color: #5f6368; font-size: 13px;">
+                <p>This is an automated system broadcast from Sri Express Emergency Management System.</p>
+                <p style="margin-top: 15px;">© ${new Date().getFullYear()} Sri Express. All rights reserved.</p>
+              </div>
+            </div>
+          `;
+
+          return sendEmail({
+            email: user.email,
+            subject: `📢 ${priority.toUpperCase()} SYSTEM BROADCAST`,
+            html: emailHtml
+          });
+        });
+
+        await Promise.all(emailPromises);
+        console.log(`📧 Email broadcast sent to ${users.length} recipients`);
+      } catch (emailError) {
+        console.error('Email broadcast failed:', emailError);
+      }
+    }
+
+    // SMS BROADCAST (for critical priority)
+    if ((method === 'sms' || method === 'system') && priority === 'critical') {
+      try {
+        const users = await User.find({
+          ...recipientQuery,
+          phone: { $exists: true, $ne: null }
+        }).select('name phone');
+
+        const smsPromises = users.map(async (user) => {
+          if (user.phone) {
+            const smsMessage = `📢 CRITICAL BROADCAST: ${message} - Sri Express Emergency System - ${new Date().toLocaleTimeString()}`;
+            return sendSMS(user.phone, smsMessage);
+          }
+        });
+
+        await Promise.all(smsPromises);
+        console.log(`📱 SMS broadcast sent to ${users.length} recipients`);
+      } catch (smsError) {
+        console.error('SMS broadcast failed:', smsError);
+      }
+    }
 
     res.json({
-      message: 'Emergency broadcast sent successfully',
+      message: 'Emergency broadcast sent successfully via multiple channels',
       broadcast: {
         _id: broadcast._id,
         incidentId: broadcast.incidentId,
@@ -592,7 +875,13 @@ export const sendEmergencyBroadcast = async (req: Request, res: Response): Promi
         recipients,
         recipientCount,
         method,
-        sentAt: new Date()
+        priority,
+        sentAt: new Date(),
+        deliveryChannels: {
+          realTime: 'delivered',
+          email: method === 'email' || method === 'system' ? 'sent' : 'skipped',
+          sms: (method === 'sms' || method === 'system') && priority === 'critical' ? 'sent' : 'skipped'
+        }
       }
     });
   } catch (error) {

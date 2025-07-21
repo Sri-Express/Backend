@@ -3,6 +3,18 @@ import mongoose, { Document, Schema } from 'mongoose';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 
+// Weather preferences interface
+export interface IWeatherPreferences {
+  defaultLocation?: string;
+  temperatureUnit?: 'celsius' | 'fahrenheit';
+  windSpeedUnit?: 'kmh' | 'mph' | 'ms';
+  notificationsEnabled?: boolean;
+  alertTypes?: string[];
+  autoRefreshInterval?: number;
+  favoriteLocations?: string[];
+  updatedAt?: Date;
+}
+
 export interface IUser extends Document {
   name: string;
   email: string;
@@ -21,6 +33,7 @@ export interface IUser extends Document {
   twoFactorEnabled: boolean;
   emailVerified: boolean;
   emailVerificationToken?: string;
+  weatherPreferences?: IWeatherPreferences;  // ⭐ NEW - Weather preferences
   comparePassword(candidatePassword: string): Promise<boolean>;
   getResetPasswordOtp(): string;
   updateLastLogin(): Promise<IUser>;
@@ -34,6 +47,56 @@ export interface IUser extends Document {
   updatedAt: Date;
   _id: mongoose.Types.ObjectId;
 }
+
+// Weather preferences schema
+const WeatherPreferencesSchema = new Schema<IWeatherPreferences>({
+  defaultLocation: {
+    type: String,
+    default: 'Colombo',
+    enum: [
+      'Colombo', 'Kandy', 'Galle', 'Jaffna', 'Anuradhapura', 
+      'Batticaloa', 'Matara', 'Negombo', 'Trincomalee', 
+      'Badulla', 'Ratnapura', 'Kurunegala'
+    ]
+  },
+  temperatureUnit: {
+    type: String,
+    enum: ['celsius', 'fahrenheit'],
+    default: 'celsius'
+  },
+  windSpeedUnit: {
+    type: String,
+    enum: ['kmh', 'mph', 'ms'],
+    default: 'kmh'
+  },
+  notificationsEnabled: {
+    type: Boolean,
+    default: true
+  },
+  alertTypes: [{
+    type: String,
+    enum: ['rain', 'wind', 'temperature', 'humidity', 'storm', 'flood'],
+    default: ['rain', 'wind', 'temperature']
+  }],
+  autoRefreshInterval: {
+    type: Number,
+    default: 10,
+    min: 1,
+    max: 60
+  },
+  favoriteLocations: [{
+    type: String,
+    enum: [
+      'Colombo', 'Kandy', 'Galle', 'Jaffna', 'Anuradhapura', 
+      'Batticaloa', 'Matara', 'Negombo', 'Trincomalee', 
+      'Badulla', 'Ratnapura', 'Kurunegala'
+    ]
+  }],
+  updatedAt: {
+    type: Date,
+    default: Date.now
+  }
+}, { _id: false });
 
 const UserSchema = new Schema<IUser>(
   {
@@ -101,7 +164,21 @@ const UserSchema = new Schema<IUser>(
       type: Boolean,
       default: false
     },
-    emailVerificationToken: String
+    emailVerificationToken: String,
+    // ⭐ NEW - Weather preferences field
+    weatherPreferences: {
+      type: WeatherPreferencesSchema,
+      default: () => ({
+        defaultLocation: 'Colombo',
+        temperatureUnit: 'celsius',
+        windSpeedUnit: 'kmh',
+        notificationsEnabled: true,
+        alertTypes: ['rain', 'wind', 'temperature'],
+        autoRefreshInterval: 10,
+        favoriteLocations: ['Colombo', 'Kandy'],
+        updatedAt: new Date()
+      })
+    }
   },
   {
     timestamps: true,
@@ -109,12 +186,12 @@ const UserSchema = new Schema<IUser>(
 );
 
 // Indexes for better query performance
-// UserSchema.index({ email: 1 }); // <-- THIS LINE IS REMOVED (unique:true handles it)
 UserSchema.index({ role: 1 });
 UserSchema.index({ isActive: 1 });
 UserSchema.index({ createdAt: 1 });
 UserSchema.index({ lastLogin: 1 });
 UserSchema.index({ loginCount: 1 });
+UserSchema.index({ 'weatherPreferences.defaultLocation': 1 }); // ⭐ NEW - Weather index
 
 // Hash password before saving
 UserSchema.pre('save', async function (next) {
@@ -133,6 +210,16 @@ UserSchema.pre('save', async function (next) {
 UserSchema.pre('save', function (next) {
   if (this.isModified('name') || this.isModified('phone') || this.isModified('department') || this.isModified('company')) {
     this.profileUpdatedAt = new Date();
+  }
+  next();
+});
+
+// ⭐ NEW - Update weatherPreferences.updatedAt when weather preferences change
+UserSchema.pre('save', function (next) {
+  if (this.isModified('weatherPreferences')) {
+    if (this.weatherPreferences) {
+      this.weatherPreferences.updatedAt = new Date();
+    }
   }
   next();
 });
