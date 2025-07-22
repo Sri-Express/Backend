@@ -39,6 +39,55 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // src/models/User.ts
 const mongoose_1 = __importStar(require("mongoose"));
 const bcrypt_1 = __importDefault(require("bcrypt"));
+// Weather preferences schema
+const WeatherPreferencesSchema = new mongoose_1.Schema({
+    defaultLocation: {
+        type: String,
+        default: 'Colombo',
+        enum: [
+            'Colombo', 'Kandy', 'Galle', 'Jaffna', 'Anuradhapura',
+            'Batticaloa', 'Matara', 'Negombo', 'Trincomalee',
+            'Badulla', 'Ratnapura', 'Kurunegala'
+        ]
+    },
+    temperatureUnit: {
+        type: String,
+        enum: ['celsius', 'fahrenheit'],
+        default: 'celsius'
+    },
+    windSpeedUnit: {
+        type: String,
+        enum: ['kmh', 'mph', 'ms'],
+        default: 'kmh'
+    },
+    notificationsEnabled: {
+        type: Boolean,
+        default: true
+    },
+    alertTypes: [{
+            type: String,
+            enum: ['rain', 'wind', 'temperature', 'humidity', 'storm', 'flood'],
+            default: ['rain', 'wind', 'temperature']
+        }],
+    autoRefreshInterval: {
+        type: Number,
+        default: 10,
+        min: 1,
+        max: 60
+    },
+    favoriteLocations: [{
+            type: String,
+            enum: [
+                'Colombo', 'Kandy', 'Galle', 'Jaffna', 'Anuradhapura',
+                'Batticaloa', 'Matara', 'Negombo', 'Trincomalee',
+                'Badulla', 'Ratnapura', 'Kurunegala'
+            ]
+        }],
+    updatedAt: {
+        type: Date,
+        default: Date.now
+    }
+}, { _id: false });
 const UserSchema = new mongoose_1.Schema({
     name: {
         type: String,
@@ -104,17 +153,31 @@ const UserSchema = new mongoose_1.Schema({
         type: Boolean,
         default: false
     },
-    emailVerificationToken: String
+    emailVerificationToken: String,
+    // ⭐ NEW - Weather preferences field
+    weatherPreferences: {
+        type: WeatherPreferencesSchema,
+        default: () => ({
+            defaultLocation: 'Colombo',
+            temperatureUnit: 'celsius',
+            windSpeedUnit: 'kmh',
+            notificationsEnabled: true,
+            alertTypes: ['rain', 'wind', 'temperature'],
+            autoRefreshInterval: 10,
+            favoriteLocations: ['Colombo', 'Kandy'],
+            updatedAt: new Date()
+        })
+    }
 }, {
     timestamps: true,
 });
 // Indexes for better query performance
-// UserSchema.index({ email: 1 }); // <-- THIS LINE IS REMOVED (unique:true handles it)
 UserSchema.index({ role: 1 });
 UserSchema.index({ isActive: 1 });
 UserSchema.index({ createdAt: 1 });
 UserSchema.index({ lastLogin: 1 });
 UserSchema.index({ loginCount: 1 });
+UserSchema.index({ 'weatherPreferences.defaultLocation': 1 }); // ⭐ NEW - Weather index
 // Hash password before saving
 UserSchema.pre('save', async function (next) {
     if (!this.isModified('password'))
@@ -132,6 +195,15 @@ UserSchema.pre('save', async function (next) {
 UserSchema.pre('save', function (next) {
     if (this.isModified('name') || this.isModified('phone') || this.isModified('department') || this.isModified('company')) {
         this.profileUpdatedAt = new Date();
+    }
+    next();
+});
+// ⭐ NEW - Update weatherPreferences.updatedAt when weather preferences change
+UserSchema.pre('save', function (next) {
+    if (this.isModified('weatherPreferences')) {
+        if (this.weatherPreferences) {
+            this.weatherPreferences.updatedAt = new Date();
+        }
     }
     next();
 });

@@ -17,6 +17,34 @@ interface AIResponse {
   context?: any;
 }
 
+// Interface for populated route in booking
+interface PopulatedRoute {
+  _id: string;
+  name: string;
+  startLocation: { name: string };
+  endLocation: { name: string };
+}
+
+// Interface for booking with flexible routeId (can be ObjectId or populated)
+interface BookingResult {
+  bookingId: string;
+  travelDate: Date;
+  status: string;
+  routeId?: PopulatedRoute | any; // Flexible to handle both ObjectId and populated
+  userId: string;
+  paymentInfo: { status: string };
+}
+
+// Interface for search results with score
+interface SearchResult {
+  _id: string;
+  title: string;
+  summary: string;
+  content: string;
+  category: string;
+  score?: number;
+}
+
 // Intent classification patterns
 const INTENT_PATTERNS = {
   greeting: ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening'],
@@ -197,7 +225,7 @@ const handleGoodbye = async (context: any): Promise<AIResponse> => {
 const handleBookingInquiry = async (message: string, context: any): Promise<AIResponse> => {
   try {
     // Search knowledge base for booking-related articles
-    const articles = await KnowledgeBase.searchArticles(message, 'booking');
+    const articles = await KnowledgeBase.searchArticles(message, 'booking') as SearchResult[];
     
     if (articles.length > 0) {
       const article = articles[0];
@@ -230,7 +258,7 @@ const handlePaymentIssue = async (message: string, context: any): Promise<AIResp
   try {
     // Check if user has recent bookings with payment issues
     if (context.userId) {
-      const recentBookings = await Booking.find({ userId: context.userId, 'paymentInfo.status': { $in: ['pending', 'failed'] } }).limit(3).sort({ createdAt: -1 });
+      const recentBookings = await Booking.find({ userId: context.userId, 'paymentInfo.status': { $in: ['pending', 'failed'] } }).limit(3).sort({ createdAt: -1 }) as unknown as BookingResult[];
       
       if (recentBookings.length > 0) {
         const booking = recentBookings[0];
@@ -247,7 +275,7 @@ const handlePaymentIssue = async (message: string, context: any): Promise<AIResp
     }
 
     // Search knowledge base for payment articles
-    const articles = await KnowledgeBase.searchArticles(message, 'payment');
+    const articles = await KnowledgeBase.searchArticles(message, 'payment') as SearchResult[];
     if (articles.length > 0) {
       return {
         message: `Here's information about payments: ${articles[0].summary}\n\nFor specific payment issues, I recommend speaking with our billing team who can access your account securely.`,
@@ -278,10 +306,13 @@ const handleTracking = async (message: string, context: any): Promise<AIResponse
   try {
     if (context.userId) {
       // Get user's recent bookings
-      const recentBookings = await Booking.find({ userId: context.userId, status: { $in: ['confirmed', 'pending'] } }).limit(5).sort({ travelDate: 1 }).populate('routeId', 'name startLocation endLocation');
+      const recentBookings = await Booking.find({ userId: context.userId, status: { $in: ['confirmed', 'pending'] } }).limit(5).sort({ travelDate: 1 }).populate('routeId', 'name startLocation endLocation') as unknown as BookingResult[];
       
       if (recentBookings.length > 0) {
-        const bookingsList = recentBookings.map(b => `• ${b.bookingId} - ${b.routeId?.name || 'Route'} on ${new Date(b.travelDate).toLocaleDateString()}`).join('\n');
+        const bookingsList = recentBookings.map(b => {
+          const routeName = (b.routeId && typeof b.routeId === 'object' && 'name' in b.routeId) ? b.routeId.name : 'Route';
+          return `• ${b.bookingId} - ${routeName} on ${new Date(b.travelDate).toLocaleDateString()}`;
+        }).join('\n');
         
         return {
           message: `Here are your recent bookings:\n\n${bookingsList}\n\nWhich booking would you like to track? Or would you like live vehicle tracking for your route?`,
@@ -356,7 +387,7 @@ const handleComplaint = async (message: string, context: any): Promise<AIRespons
 
 const handleTechnicalIssue = async (message: string, context: any): Promise<AIResponse> => {
   try {
-    const articles = await KnowledgeBase.searchArticles(message, 'technical');
+    const articles = await KnowledgeBase.searchArticles(message, 'technical') as SearchResult[];
     
     if (articles.length > 0) {
       return {
@@ -387,7 +418,7 @@ const handleTechnicalIssue = async (message: string, context: any): Promise<AIRe
 const handleCancellation = async (message: string, context: any): Promise<AIResponse> => {
   try {
     if (context.userId) {
-      const activeBookings = await Booking.find({ userId: context.userId, status: 'confirmed', travelDate: { $gte: new Date() } }).limit(5).sort({ travelDate: 1 });
+      const activeBookings = await Booking.find({ userId: context.userId, status: 'confirmed', travelDate: { $gte: new Date() } }).limit(5).sort({ travelDate: 1 }) as unknown as BookingResult[];
       
       if (activeBookings.length > 0) {
         return {
@@ -419,18 +450,23 @@ const handleCancellation = async (message: string, context: any): Promise<AIResp
 const handleGeneral = async (message: string, context: any): Promise<AIResponse> => {
   try {
     // Search knowledge base for general information
-    const articles = await KnowledgeBase.searchArticles(message);
+    const articles = await KnowledgeBase.searchArticles(message) as SearchResult[];
     
-    if (articles.length > 0 && articles[0].score > 0.5) {
-      return {
-        message: `I found this information that might help: ${articles[0].summary}\n\nWould you like more details, or is there something specific you'd like assistance with?`,
-        confidence: 0.6,
-        type: 'answer',
-        suggestions: ['More details', 'Book ticket', 'Track booking', 'Speak to agent'],
-        actions: [{ type: 'show_article', data: { articleId: articles[0]._id } }],
-        responseId: '',
-        context
-      };
+    if (articles.length > 0) {
+      // Check if we have a score property, otherwise just use the first article
+      const hasGoodScore = articles[0].score ? articles[0].score > 0.5 : true;
+      
+      if (hasGoodScore) {
+        return {
+          message: `I found this information that might help: ${articles[0].summary}\n\nWould you like more details, or is there something specific you'd like assistance with?`,
+          confidence: 0.6,
+          type: 'answer',
+          suggestions: ['More details', 'Book ticket', 'Track booking', 'Speak to agent'],
+          actions: [{ type: 'show_article', data: { articleId: articles[0]._id } }],
+          responseId: '',
+          context
+        };
+      }
     }
 
     return {

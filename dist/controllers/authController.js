@@ -10,7 +10,13 @@ const User_1 = __importDefault(require("../models/User"));
 const sendEmail_1 = require("../utils/sendEmail");
 // Generate JWT
 const generateToken = (id) => {
-    return jsonwebtoken_1.default.sign({ id }, process.env.JWT_SECRET || '', {
+    // Ensure JWT_SECRET is loaded from your .env file
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+        console.error('FATAL ERROR: JWT_SECRET is not defined.');
+        process.exit(1);
+    }
+    return jsonwebtoken_1.default.sign({ id }, secret, {
         expiresIn: '30d',
     });
 };
@@ -23,7 +29,7 @@ const registerUser = async (req, res) => {
         // Check if user already exists
         const userExists = await User_1.default.findOne({ email });
         if (userExists) {
-            res.status(400).json({ message: 'User already exists' });
+            res.status(400).json({ success: false, message: 'User already exists' });
             return;
         }
         // Create new user
@@ -34,24 +40,27 @@ const registerUser = async (req, res) => {
             role: 'client', // Default role for new registrations is client
         });
         if (user) {
-            // Get the ID as a string
             const userId = user._id.toString();
             res.status(201).json({
-                _id: userId,
-                name: user.name,
-                email: user.email,
-                role: user.role,
+                success: true,
+                user: {
+                    _id: userId,
+                    name: user.name,
+                    email: user.email,
+                    role: user.role,
+                },
                 token: generateToken(userId),
             });
         }
         else {
-            res.status(400).json({ message: 'Invalid user data' });
+            res.status(400).json({ success: false, message: 'Invalid user data' });
         }
     }
     catch (error) {
         console.error('Register error:', error);
         res.status(500).json({
-            message: 'Server error',
+            success: false,
+            message: 'Server error during registration',
             error: error instanceof Error ? error.message : 'Unknown error'
         });
     }
@@ -63,33 +72,47 @@ exports.registerUser = registerUser;
 const loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
+        console.log(`\n--- LOGIN ATTEMPT: ${new Date().toISOString()} ---`);
+        console.log(`Attempting login for email: ${email}`);
         // Find user by email
         const user = await User_1.default.findOne({ email });
         if (!user) {
-            res.status(401).json({ message: 'Invalid email or password' });
+            console.log(`Result: User with email '${email}' NOT FOUND in database.`);
+            console.log(`---------------------------------------------------\n`);
+            res.status(401).json({ success: false, message: 'Invalid email or password' });
             return;
         }
+        console.log(`Result: User FOUND. User ID: ${user._id}, Role: ${user.role}`);
+        console.log(`Now comparing provided password with stored hash...`);
         // Check if password matches
         const isMatch = await user.comparePassword(password);
         if (!isMatch) {
-            res.status(401).json({ message: 'Invalid email or password' });
+            console.log(`Result: Password comparison FAILED.`);
+            console.log(`---------------------------------------------------\n`);
+            res.status(401).json({ success: false, message: 'Invalid email or password' });
             return;
         }
+        console.log(`Result: Password comparison SUCCEEDED.`);
+        console.log(`---------------------------------------------------\n`);
         // Get the ID as a string
         const userId = user._id.toString();
         // Return user information with token
         res.json({
-            _id: userId,
-            name: user.name,
-            email: user.email,
-            role: user.role,
+            success: true,
+            user: {
+                _id: userId,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+            },
             token: generateToken(userId),
         });
     }
     catch (error) {
         console.error('Login error:', error);
         res.status(500).json({
-            message: 'Server error',
+            success: false,
+            message: 'Server error during login',
             error: error instanceof Error ? error.message : 'Unknown error'
         });
     }
@@ -100,27 +123,27 @@ exports.loginUser = loginUser;
 // @access  Private
 const getUserProfile = async (req, res) => {
     try {
+        // The 'protect' middleware should have already attached the user
         if (!req.user) {
-            res.status(401).json({ message: 'Not authorized' });
+            res.status(401).json({ success: false, message: 'Not authorized, no user found' });
             return;
         }
-        const user = await User_1.default.findById(req.user._id).select('-password');
-        if (user) {
-            res.json({
-                _id: user._id.toString(),
-                name: user.name,
-                email: user.email,
-                role: user.role,
-            });
-        }
-        else {
-            res.status(404).json({ message: 'User not found' });
-        }
+        // We can just send the user object from the request
+        res.json({
+            success: true,
+            user: {
+                _id: req.user._id.toString(),
+                name: req.user.name,
+                email: req.user.email,
+                role: req.user.role,
+            }
+        });
     }
     catch (error) {
         console.error('Profile error:', error);
         res.status(500).json({
-            message: 'Server error',
+            success: false,
+            message: 'Server error fetching profile',
             error: error instanceof Error ? error.message : 'Unknown error'
         });
     }
@@ -134,45 +157,40 @@ const forgotPassword = async (req, res) => {
         const { email } = req.body;
         console.log(`[forgotPassword] Request received for email: ${email}`);
         if (!email) {
-            res.status(400).json({ message: 'Please provide an email address' });
+            res.status(400).json({ success: false, message: 'Please provide an email address' });
             return;
         }
-        // Find user by email
         const user = await User_1.default.findOne({ email });
-        // For security, don't reveal if user exists or not
         if (!user) {
             console.log(`[forgotPassword] User not found: ${email}, but not revealing this info`);
             res.status(200).json({
                 success: true,
-                message: 'If an account exists with this email, an OTP has been sent.'
+                message: 'If an account with this email exists, a password reset OTP has been sent.'
             });
             return;
         }
-        // Generate OTP and get the plain text version
         const otp = user.getResetPasswordOtp();
-        // Save the user with the hashed OTP and expiry time
         await user.save({ validateBeforeSave: false });
-        // Send email with the plain OTP
         try {
             await (0, sendEmail_1.sendPasswordResetOTP)(user.email, otp, user.name);
             res.status(200).json({
                 success: true,
-                message: 'If an account exists with this email, an OTP has been sent.'
+                message: 'If an account with this email exists, a password reset OTP has been sent.'
             });
         }
         catch (emailError) {
             console.error('Error sending password reset email:', emailError);
-            // Clear the reset data if email fails
             user.resetPasswordToken = undefined;
             user.resetPasswordExpire = undefined;
             await user.save({ validateBeforeSave: false });
-            res.status(500).json({ message: 'Email could not be sent. Please try again later.' });
+            res.status(500).json({ success: false, message: 'Email could not be sent. Please try again later.' });
         }
     }
     catch (error) {
         console.error('Forgot password error:', error);
         res.status(500).json({
-            message: 'Server error',
+            success: false,
+            message: 'Server error during forgot password process',
             error: error instanceof Error ? error.message : 'Unknown error'
         });
     }
@@ -185,42 +203,33 @@ const resetPasswordWithOtp = async (req, res) => {
     try {
         const { email, otp, password } = req.body;
         if (!email || !otp || !password) {
-            res.status(400).json({ message: 'Please provide email, OTP, and new password' });
+            res.status(400).json({ success: false, message: 'Please provide email, OTP, and new password' });
             return;
         }
         if (password.length < 6) {
-            res.status(400).json({ message: 'Password must be at least 6 characters long' });
+            res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
             return;
         }
-        // Find user with non-expired reset token
         const user = await User_1.default.findOne({
             email,
             resetPasswordToken: { $exists: true, $ne: null },
             resetPasswordExpire: { $gt: Date.now() }
         });
-        if (!user) {
+        if (!user || !user.resetPasswordToken) {
             res.status(400).json({
+                success: false,
                 message: 'Invalid OTP or expired reset request. Please try again.'
             });
             return;
         }
-        // Check if resetPasswordToken exists
-        if (!user.resetPasswordToken) {
-            res.status(400).json({ message: 'Reset token not found' });
-            return;
-        }
-        // Verify OTP by comparing with hashed token in database
         const isOtpValid = await bcrypt_1.default.compare(otp, user.resetPasswordToken);
         if (!isOtpValid) {
-            res.status(400).json({ message: 'Invalid OTP. Please check and try again.' });
+            res.status(400).json({ success: false, message: 'Invalid OTP. Please check and try again.' });
             return;
         }
-        // Set new password (will be hashed by pre-save hook)
         user.password = password;
-        // Clear reset token fields
         user.resetPasswordToken = undefined;
         user.resetPasswordExpire = undefined;
-        // Save user with new password
         await user.save();
         res.status(200).json({
             success: true,
@@ -230,7 +239,8 @@ const resetPasswordWithOtp = async (req, res) => {
     catch (error) {
         console.error('Reset password error:', error);
         res.status(500).json({
-            message: 'Server error',
+            success: false,
+            message: 'Server error during password reset',
             error: error instanceof Error ? error.message : 'Unknown error'
         });
     }

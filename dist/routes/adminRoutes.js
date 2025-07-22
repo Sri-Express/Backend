@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // src/routes/adminRoutes.ts - FIXED ADMIN ROUTES WITH GPS SIMULATION
 const express_1 = __importDefault(require("express"));
 const adminMiddleware_1 = require("../middleware/adminMiddleware");
+const Emergency_1 = __importDefault(require("../models/Emergency")); // Assuming Emergency model path
 // User management controllers
 const adminUserController_1 = require("../controllers/adminUserController");
 // Device management controllers
@@ -69,6 +70,39 @@ router.get('/emergency/incidents', adminEmergencyController_1.getAllIncidents);
 router.post('/emergency/broadcast', adminEmergencyController_1.sendEmergencyBroadcast);
 router.get('/emergency/teams', adminEmergencyController_1.getEmergencyTeams);
 router.put('/emergency/:id/resolve', adminEmergencyController_1.resolveEmergency);
+// Add this route for users to get their alerts
+router.get('/emergency/user-alerts', async (req, res) => {
+    try {
+        // Get recent emergency alerts that should be visible to users
+        const alerts = await Emergency_1.default.find({
+            isActive: true,
+            createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Last 24 hours
+            $or: [
+                { priority: { $in: ['critical', 'high', 'medium'] } },
+                { type: 'broadcast' }
+            ]
+        })
+            .sort({ createdAt: -1 })
+            .limit(50)
+            .select('incidentId title description type priority createdAt location');
+        // Transform to alert format
+        const formattedAlerts = alerts.map(emergency => ({
+            id: `emergency_${emergency._id}`,
+            type: emergency.type === 'system' ? 'broadcast' : 'emergency_created',
+            title: emergency.title,
+            message: emergency.description,
+            priority: emergency.priority,
+            timestamp: emergency.createdAt,
+            recipients: emergency.priority === 'low' ? ['admins'] : ['all'],
+            emergency: emergency,
+            read: false
+        }));
+        res.json({ alerts: formattedAlerts });
+    }
+    catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+});
 // ============================
 // GPS SIMULATION ROUTES
 // ============================
@@ -155,7 +189,7 @@ router.get('/docs', (req, res) => {
             fleet: 'Fleet management endpoints (12 total)',
             simulation: 'GPS simulation endpoints (8 total)',
             ai: 'AI module endpoints (3 total)',
-            emergency: 'Emergency management endpoints (6 total)',
+            emergency: 'Emergency management endpoints (7 total)',
             analytics: 'Analytics and reporting endpoints (5 total)'
         },
         totalEndpoints: '60+',

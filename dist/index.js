@@ -3,12 +3,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-// src/index.ts - COMPLETE TRANSPORTATION PLATFORM
+// =============================================================================
+// Sri Express Transportation Platform - Complete Server with Customer Service
+// Version: 4.0.0 - IDEALIZE 2025 Competition Ready
+// Team: XForce (University of Moratuwa)
+// =============================================================================
 const express_1 = __importDefault(require("express"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const helmet_1 = __importDefault(require("helmet"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const cors_1 = __importDefault(require("cors"));
+const http_1 = require("http");
 // Load environment variables
 dotenv_1.default.config();
 // Import all models to ensure they're registered
@@ -18,30 +23,39 @@ require("./models/Trip");
 require("./models/Emergency");
 require("./models/UserActivity");
 require("./models/Fleet");
-require("./models/Route"); // ✅ FIXED VERSION
-require("./models/Booking"); // ✅ FIXED VERSION
-require("./models/LocationTracking"); // ✅ FIXED VERSION  
-require("./models/Payment"); // ✅ FIXED VERSION
-// Import ALL routes - COMPLETE PLATFORM ⭐
+require("./models/Route");
+require("./models/Booking");
+require("./models/LocationTracking");
+require("./models/Payment");
+require("./models/Ticket"); // ⭐ NEW - Customer Service Models
+require("./models/Chat"); // ⭐ NEW - Customer Service Models
+require("./models/KnowledgeBase"); // ⭐ NEW - Customer Service Models
+require("./models/WeatherChat"); // ⭐ ADD THIS LINE
+// Import ALL routes
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const dashboardRoutes_1 = __importDefault(require("./routes/dashboardRoutes"));
 const adminRoutes_1 = __importDefault(require("./routes/adminRoutes"));
-// NEW TRANSPORTATION ROUTES ⭐
 const routeRoutes_1 = __importDefault(require("./routes/routeRoutes"));
 const bookingRoutes_1 = __importDefault(require("./routes/bookingRoutes"));
 const trackingRoutes_1 = __importDefault(require("./routes/trackingRoutes"));
 const paymentRoutes_1 = __importDefault(require("./routes/paymentRoutes"));
 const paymentSimulationRoutes_1 = __importDefault(require("./routes/paymentSimulationRoutes"));
+const csRoutes_1 = __importDefault(require("./routes/csRoutes")); // ⭐ NEW - Customer Service Routes
+const weatherRoutes_1 = __importDefault(require("./routes/weatherRoutes")); // ⭐ ADD THIS LINE
 // Import middleware
 const errorMiddleware_1 = require("./middleware/errorMiddleware");
 // Import DB connection
 const db_1 = __importDefault(require("./config/db"));
+// Import Real-time Emergency Service
+const realTimeEmergencyService_1 = require("./services/realTimeEmergencyService");
 // Initialize express app
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
+// Create HTTP server for Socket.io
+const httpServer = (0, http_1.createServer)(app);
 // Configure CORS to allow all origins for development
 app.use((0, cors_1.default)({
-    origin: true, // Allow all origins in development
+    origin: true,
     credentials: true,
     optionsSuccessStatus: 200
 }));
@@ -59,8 +73,8 @@ app.use((req, res, next) => {
 // Basic route for testing
 app.get('/', (req, res) => {
     res.json({
-        message: 'ශ්‍රී Express API - Complete Transportation Platform!',
-        version: '2.0.0',
+        message: 'ශ්‍රී Express API - Complete Transportation Platform with Customer Service & Real-time Emergency Alerts!',
+        version: '4.0.0',
         status: 'operational',
         timestamp: new Date().toISOString(),
         features: [
@@ -72,7 +86,17 @@ app.get('/', (req, res) => {
             '✅ Payment Processing & Refunds',
             '✅ Enhanced Dashboard',
             '✅ Emergency Management',
-            '✅ Analytics & Reporting'
+            '✅ Analytics & Reporting',
+            '✅ Weather Intelligence System', // ⭐ ADD THIS
+            '🎯 CUSTOMER SERVICE PORTAL', // ⭐ NEW
+            '🤖 AI CHATBOT INTEGRATION', // ⭐ NEW
+            '🎫 TICKET MANAGEMENT SYSTEM', // ⭐ NEW
+            '💬 REAL-TIME CHAT SUPPORT', // ⭐ NEW
+            '📚 KNOWLEDGE BASE MANAGEMENT', // ⭐ NEW
+            '🌤️ AI-Powered Weather Chatbot', // ⭐ ADD THIS
+            '🚨 REAL-TIME EMERGENCY ALERTS',
+            '🔔 LIVE NOTIFICATIONS',
+            '⚡ WEBSOCKET CONNECTIONS'
         ],
         endpoints: {
             auth: '/api/auth',
@@ -81,15 +105,36 @@ app.get('/', (req, res) => {
             routes: '/api/routes',
             bookings: '/api/bookings',
             tracking: '/api/tracking',
-            payments: '/api/payments'
+            payments: '/api/payments',
+            customerService: '/api/cs', // ⭐ NEW
+            weather: '/api/weather', // ⭐ ADD THIS
+            websocket: 'ws://localhost:' + PORT
         },
-        totalEndpoints: '60+',
+        totalEndpoints: '130+', // ⭐ UPDATED
+        realTimeFeatures: {
+            emergencyAlerts: 'Active',
+            liveNotifications: 'Active',
+            websocketConnections: 'Active',
+            pushNotifications: 'Active',
+            aiChatbot: 'Active', // ⭐ NEW
+            liveChat: 'Active' // ⭐ NEW
+        },
         competition: 'IDEALIZE 2025 Ready! 🏆'
     });
 });
 app.use('/api/payment-simulation', paymentSimulationRoutes_1.default);
-// Health check endpoint
+// Health check endpoint with real-time status
 app.get('/health', (req, res) => {
+    let connectedUsers = 0;
+    let realTimeActive = false;
+    try {
+        const realTimeService = (0, realTimeEmergencyService_1.getRealTimeEmergencyService)();
+        connectedUsers = realTimeService.getConnectedUsersCount();
+        realTimeActive = true;
+    }
+    catch (error) {
+        // Service not initialized yet
+    }
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
@@ -97,8 +142,8 @@ app.get('/health', (req, res) => {
         memory: process.memoryUsage(),
         database: mongoose_1.default.connection.readyState === 1 ? 'connected' : 'disconnected',
         environment: process.env.NODE_ENV || 'development',
-        version: '2.0.0',
-        platform: 'Complete Transportation Management System',
+        version: '4.0.0', // ⭐ UPDATED
+        platform: 'Complete Transportation Management System with Customer Service & Real-time Alerts',
         features: {
             authentication: 'active',
             adminSystem: 'active',
@@ -107,16 +152,84 @@ app.get('/health', (req, res) => {
             bookingSystem: 'active',
             trackingSystem: 'active',
             paymentSystem: 'active',
-            analytics: 'active'
+            analytics: 'active',
+            customerService: 'active', // ⭐ NEW
+            aiChatbot: 'active', // ⭐ NEW
+            ticketSystem: 'active', // ⭐ NEW
+            liveChat: 'active', // ⭐ NEW
+            knowledgeBase: 'active', // ⭐ NEW
+            weatherSystem: 'active', // ⭐ ADD THIS
+            weatherChatbot: 'active', // ⭐ ADD THIS
+            realTimeEmergency: realTimeActive ? 'active' : 'initializing',
+            websocketServer: connectedUsers > 0 ? 'active' : 'ready'
+        },
+        realTimeStats: {
+            connectedUsers: connectedUsers,
+            websocketServer: 'running',
+            emergencyAlertsActive: realTimeActive
         }
     });
+});
+// Real-time emergency test endpoint
+app.get('/test-emergency', async (req, res) => {
+    try {
+        const realTimeService = (0, realTimeEmergencyService_1.getRealTimeEmergencyService)();
+        // Send test emergency broadcast
+        await realTimeService.sendSystemBroadcast('This is a test emergency broadcast from the system!', 'high', ['all']);
+        res.json({
+            message: 'Test emergency broadcast sent!',
+            timestamp: new Date().toISOString(),
+            connectedUsers: realTimeService.getConnectedUsersCount()
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            message: 'Failed to send test broadcast - service not initialized',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+// WebSocket status endpoint
+app.get('/websocket-status', (req, res) => {
+    try {
+        const realTimeService = (0, realTimeEmergencyService_1.getRealTimeEmergencyService)();
+        const connectedUsers = realTimeService.getConnectedUsers();
+        res.json({
+            status: 'WebSocket server running',
+            connectedUsers: connectedUsers.length,
+            users: connectedUsers.map((user) => ({
+                name: user.name,
+                role: user.role,
+                lastSeen: user.lastSeen,
+                socketId: user.socketId.substring(0, 8) + '...' // Partial socket ID for privacy
+            })),
+            timestamp: new Date().toISOString()
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            message: 'WebSocket service not available',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
 });
 // Complete API documentation endpoint
 app.get('/api', (req, res) => {
     res.json({
-        message: 'Sri Express API v2.0.0 - Complete Transportation Platform',
+        message: 'Sri Express API v4.0.0 - Complete Transportation Platform with Customer Service & Real-time Emergency Alerts',
         status: 'All Systems Operational ✅',
-        totalEndpoints: '60+',
+        totalEndpoints: '130+', // ⭐ UPDATED
+        newFeatures: {
+            customerServicePortal: 'Complete CS agent dashboard and ticket management', // ⭐ NEW
+            aiChatbot: 'Intelligent customer support with natural language processing', // ⭐ NEW
+            ticketSystem: 'Full-featured support ticket lifecycle management', // ⭐ NEW
+            liveChat: 'Real-time chat between customers and support agents', // ⭐ NEW
+            knowledgeBase: 'Self-service FAQ and documentation with AI training', // ⭐ NEW
+            realTimeEmergencyAlerts: 'Live emergency broadcasting system',
+            websocketConnections: 'Real-time bi-directional communication',
+            pushNotifications: 'Browser push notification support',
+            liveUpdates: 'Instant dashboard and emergency updates'
+        },
         documentation: {
             authentication: {
                 base: '/api/auth',
@@ -128,73 +241,53 @@ app.get('/api', (req, res) => {
                     'PUT /reset-password - Reset password with OTP'
                 ]
             },
-            dashboard: {
-                base: '/api/dashboard',
+            customerService: {
+                base: '/api/cs',
                 endpoints: [
-                    'GET /stats - Dashboard statistics',
-                    'GET /recent-trips - Recent trip history',
-                    'GET /upcoming-trips - Upcoming trips',
-                    'PUT /profile - Update user profile',
-                    'POST /demo-trip - Create demo data'
+                    'GET /dashboard - CS agent dashboard with analytics',
+                    'GET /tickets - Ticket management with filtering',
+                    'POST /tickets - Create new support ticket',
+                    'GET /chat/sessions - Live chat session management',
+                    'POST /chat/sessions - Start new chat session',
+                    'GET /knowledge - Knowledge base article management',
+                    'POST /ai/respond - AI chatbot responses',
+                    'GET /ai/suggestions - Agent response suggestions'
                 ]
             },
-            admin: {
-                base: '/api/admin',
-                categories: [
-                    'User Management (10 endpoints)',
-                    'Device Management (8 endpoints)',
-                    'Fleet Management (12 endpoints)',
-                    'AI Management (8 endpoints)',
-                    'Emergency Management (6 endpoints)',
-                    'System Analytics (5 endpoints)'
+            weather: {
+                base: '/api/weather',
+                endpoints: [
+                    'GET /locations - Available weather locations',
+                    'GET /current/:location - Current weather data',
+                    'GET /comprehensive/:location - Complete weather data',
+                    'POST /multiple - Weather for multiple locations',
+                    'GET /route/:from/:to - Route weather analysis',
+                    'GET /alerts/:location - Weather alerts',
+                    'GET /chat/history - Weather chat history (auth)',
+                    'POST /chat/save - Save weather chat (auth)',
+                    'GET /preferences - Weather preferences (auth)',
+                    'PUT /preferences - Update preferences (auth)'
                 ]
             },
-            routes: {
-                base: '/api/routes',
-                endpoints: [
-                    'GET / - List all routes with filtering',
-                    'GET /search - Search routes between locations',
-                    'GET /:id - Get route details',
-                    'GET /:id/schedules - Get route schedules',
-                    'GET /:id/realtime - Get real-time route info',
-                    'POST / - Create route (Admin)',
-                    'PUT /:id - Update route (Admin)',
-                    'DELETE /:id - Delete route (Admin)'
+            realTimeEmergency: {
+                base: 'WebSocket connection required',
+                events: [
+                    'emergency_alert - Real-time emergency notifications',
+                    'emergency_created - New emergency incident',
+                    'emergency_resolved - Emergency resolution',
+                    'emergency_escalated - Emergency escalation',
+                    'broadcast - System-wide announcements',
+                    'push_notification_request - Browser push notifications',
+                    'chat_message - Real-time chat messages', // ⭐ NEW
+                    'ticket_update - Live ticket status updates' // ⭐ NEW
                 ]
             },
-            bookings: {
-                base: '/api/bookings',
+            testing: {
                 endpoints: [
-                    'GET / - Get user bookings with filtering',
-                    'POST / - Create new booking',
-                    'GET /stats - Booking statistics',
-                    'GET /:id - Get booking details',
-                    'PUT /:id - Update booking',
-                    'PUT /:id/cancel - Cancel booking',
-                    'POST /:id/qr - Generate QR code',
-                    'POST /:id/checkin - Check in passenger'
-                ]
-            },
-            tracking: {
-                base: '/api/tracking',
-                endpoints: [
-                    'GET /live - Live vehicle locations',
-                    'GET /route/:routeId - Vehicles on specific route',
-                    'GET /eta/:bookingId - ETA for booking',
-                    'POST /update - Update vehicle location',
-                    'GET /history/:vehicleId - Vehicle history (Admin)',
-                    'GET /analytics - Tracking analytics (Admin)'
-                ]
-            },
-            payments: {
-                base: '/api/payments',
-                endpoints: [
-                    'GET /methods - Available payment methods',
-                    'POST / - Process payment',
-                    'GET /history - Payment history',
-                    'GET /stats - Payment statistics',
-                    'GET /:id - Get payment details',
-                    'POST /refund - Process refund'
+                    'GET /test-emergency - Send test emergency broadcast',
+                    'GET /websocket-status - Check WebSocket connections',
+                    'GET /health - System health with real-time stats',
+                    'GET /api/cs/health - Customer service system health' // ⭐ NEW
                 ]
             }
         }
@@ -203,46 +296,81 @@ app.get('/api', (req, res) => {
 // Test endpoint
 app.get('/test', (req, res) => {
     res.json({
-        message: 'Complete Transportation Platform Test!',
+        message: 'Complete Transportation Platform with Customer Service & Real-time Emergency Alerts!',
         timestamp: new Date().toISOString(),
         status: '✅ All systems operational',
         platform: 'Sri Express Transportation Management',
-        version: '2.0.0',
+        version: '4.0.0', // ⭐ UPDATED
         competition: 'IDEALIZE 2025',
         team: 'XForce (University of Moratuwa)',
-        totalEndpoints: '60+',
+        totalEndpoints: '130+', // ⭐ UPDATED
+        newFeatures: [
+            '🎯 Complete Customer Service Portal', // ⭐ NEW
+            '🤖 AI-Powered Chatbot Support', // ⭐ NEW
+            '🎫 Advanced Ticket Management', // ⭐ NEW
+            '💬 Real-time Chat System', // ⭐ NEW
+            '📚 Intelligent Knowledge Base', // ⭐ NEW
+            '🚨 Real-time Emergency Alerts',
+            '🔔 Live Push Notifications',
+            '⚡ WebSocket Connections',
+            '📡 Live Dashboard Updates',
+            '🎯 Multi-channel Broadcasting'
+        ],
         modelsLoaded: [
             'User ✅', 'Device ✅', 'Trip ✅', 'Emergency ✅', 'UserActivity ✅',
-            'Fleet ✅', 'Route ✅ (Fixed)', 'Booking ✅ (Fixed)', 'LocationTracking ✅ (Fixed)', 'Payment ✅ (Fixed)'
+            'Fleet ✅', 'Route ✅', 'Booking ✅', 'LocationTracking ✅', 'Payment ✅',
+            'Ticket ✅', 'Chat ✅', 'KnowledgeBase ✅' // ⭐ NEW
         ],
-        readyFor: 'Production Deployment 🚀'
+        readyFor: 'Production Deployment with Complete Customer Service & Live Emergency System 🚀'
     });
 });
 // ============================
-// COMPLETE API ROUTES - ALL SYSTEMS ACTIVE ⭐
+// COMPLETE API ROUTES - ALL SYSTEMS ACTIVE + CUSTOMER SERVICE ⭐
 // ============================
 // Core system routes
 app.use('/api/auth', authRoutes_1.default);
 app.use('/api/dashboard', dashboardRoutes_1.default);
 app.use('/api/admin', adminRoutes_1.default);
-// Complete transportation system routes ⭐
+// Complete transportation system routes
 app.use('/api/routes', routeRoutes_1.default);
 app.use('/api/bookings', bookingRoutes_1.default);
 app.use('/api/tracking', trackingRoutes_1.default);
 app.use('/api/payments', paymentRoutes_1.default);
+// Customer Service routes ⭐ NEW
+app.use('/api/cs', csRoutes_1.default);
+// Weather routes ⭐ NEW
+app.use('/api/weather', weatherRoutes_1.default); // ⭐ ADD THIS LINE
 // Error handling middleware
 app.use(errorMiddleware_1.notFound);
 app.use(errorMiddleware_1.errorHandler);
+// Global error handler for uncaught exceptions
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    // Don't exit in production - log and continue
+    if (process.env.NODE_ENV === 'production') {
+        console.error('Production: Continuing after uncaught exception');
+    }
+});
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    // Don't exit in production - log and continue
+    if (process.env.NODE_ENV === 'production') {
+        console.error('Production: Continuing after unhandled rejection');
+    }
+});
 // Graceful shutdown
 process.on('SIGTERM', async () => {
     console.log('SIGTERM received, shutting down gracefully');
     try {
         await mongoose_1.default.connection.close();
         console.log('MongoDB connection closed');
-        process.exit(0);
+        httpServer.close(() => {
+            console.log('HTTP server closed');
+            process.exit(0);
+        });
     }
     catch (error) {
-        console.error('Error closing MongoDB connection:', error);
+        console.error('Error during shutdown:', error);
         process.exit(1);
     }
 });
@@ -251,10 +379,13 @@ process.on('SIGINT', async () => {
     try {
         await mongoose_1.default.connection.close();
         console.log('MongoDB connection closed');
-        process.exit(0);
+        httpServer.close(() => {
+            console.log('HTTP server closed');
+            process.exit(0);
+        });
     }
     catch (error) {
-        console.error('Error closing MongoDB connection:', error);
+        console.error('Error during shutdown:', error);
         process.exit(1);
     }
 });
@@ -263,16 +394,22 @@ const startServer = async () => {
     try {
         // Connect to MongoDB and wait for it to finish
         await (0, db_1.default)();
-        // Now that the DB is connected, start the server
-        app.listen(PORT, () => {
+        // Initialize Real-time Emergency Service AFTER database connection
+        console.log('🚨 Initializing Real-time Emergency Service...');
+        const realTimeService = (0, realTimeEmergencyService_1.initializeRealTimeEmergencyService)(httpServer);
+        console.log('✅ Real-time Emergency Service initialized successfully');
+        // Now start the HTTP server with Socket.io
+        httpServer.listen(PORT, () => {
             console.log('🚀 ================================================================');
-            console.log('🚀               SRI EXPRESS TRANSPORTATION PLATFORM              🚀');
+            console.log('🚀            SRI EXPRESS TRANSPORTATION PLATFORM v4.0.0          🚀');
+            console.log('🚀          WITH CUSTOMER SERVICE & REAL-TIME EMERGENCY ALERTS    🚀');
             console.log('🚀 ================================================================');
             console.log(`📍 Server: http://localhost:${PORT}`);
+            console.log(`🔌 WebSocket: ws://localhost:${PORT}`);
             console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
             console.log(`📍 Database: ${mongoose_1.default.connection.readyState === 1 ? '✅ Connected' : '❌ Disconnected'}`);
-            console.log(`📍 API Version: 2.0.0`);
-            console.log(`📍 Total Endpoints: 60+`);
+            console.log(`📍 API Version: 4.0.0`);
+            console.log(`📍 Total Endpoints: 130+`);
             console.log(`📍 Competition: IDEALIZE 2025`);
             console.log(`📍 Team: XForce (University of Moratuwa)`);
             console.log('🚀 ================================================================');
@@ -284,22 +421,68 @@ const startServer = async () => {
             console.log('📍   🎫 Booking System: http://localhost:' + PORT + '/api/bookings/*');
             console.log('📍   📍 Live Tracking: http://localhost:' + PORT + '/api/tracking/*');
             console.log('📍   💳 Payment Processing: http://localhost:' + PORT + '/api/payments/*');
+            console.log('📍   🌤️  Weather System: http://localhost:' + PORT + '/api/weather/*');
+            console.log('🎯 ================================================================');
+            console.log('🎯 CUSTOMER SERVICE ENDPOINTS:'); // ⭐ NEW
+            console.log('🎯   🎫 CS Dashboard: http://localhost:' + PORT + '/api/cs/dashboard');
+            console.log('🎯   🎫 Ticket System: http://localhost:' + PORT + '/api/cs/tickets/*');
+            console.log('🎯   💬 Live Chat: http://localhost:' + PORT + '/api/cs/chat/*');
+            console.log('🎯   📚 Knowledge Base: http://localhost:' + PORT + '/api/cs/knowledge/*');
+            console.log('🎯   🤖 AI Chatbot: http://localhost:' + PORT + '/api/cs/ai/*');
+            console.log('🎯   📊 CS Analytics: http://localhost:' + PORT + '/api/cs/analytics');
+            console.log('🚨 ================================================================');
+            console.log('🚨 REAL-TIME EMERGENCY FEATURES:');
+            console.log('🚨   🔔 Emergency Alerts: WebSocket Connection Active');
+            console.log('🚨   📡 Live Notifications: Real-time Broadcasting');
+            console.log('🚨   ⚡ Push Notifications: Browser Integration Ready');
+            console.log('🚨   🎯 Multi-channel Alerts: Email + Push + In-app');
+            console.log('🚨   💬 Live Chat Messages: Real-time Customer Support'); // ⭐ NEW
+            console.log('🚨   🎫 Live Ticket Updates: Instant Status Changes'); // ⭐ NEW
             console.log('🚀 ================================================================');
-            console.log('📍 QUICK TEST ENDPOINTS:');
+            console.log('📍 TESTING ENDPOINTS:');
+            console.log('📍   - Emergency Test: http://localhost:' + PORT + '/test-emergency');
+            console.log('📍   - WebSocket Status: http://localhost:' + PORT + '/websocket-status');
             console.log('📍   - Complete API Docs: http://localhost:' + PORT + '/api');
             console.log('📍   - System Health: http://localhost:' + PORT + '/health');
             console.log('📍   - Platform Test: http://localhost:' + PORT + '/test');
+            console.log('📍   - CS Health Check: http://localhost:' + PORT + '/api/cs/health'); // ⭐ NEW
             console.log('🚀 ================================================================');
-            console.log('🎉 COMPLETE TRANSPORTATION PLATFORM READY!');
-            console.log('🏆 IDEALIZE 2025 - COMPETITION READY!');
-            console.log('🚀 Backend: 100% Complete | Frontend: Ready for Enhancement');
+            console.log('🎉 COMPLETE TRANSPORTATION PLATFORM WITH CUSTOMER SERVICE READY!');
+            console.log('🏆 IDEALIZE 2025 - COMPETITION READY WITH FULL SUPPORT SYSTEM!');
+            console.log('🚀 Backend: 100% Complete | Customer Service: ACTIVE | Real-time: ACTIVE');
+            console.log('🎯 Customer Service: LIVE AND OPERATIONAL! 🎯');
+            console.log('🚨 Emergency System: LIVE AND OPERATIONAL! 🚨');
             console.log('🚀 ================================================================');
+            console.log('🎯 NEW FEATURES ACTIVE:'); // ⭐ NEW
+            console.log('🎯   ✅ AI-Powered Customer Support Chatbot');
+            console.log('🎯   ✅ Real-time Chat Between Customers & Agents');
+            console.log('🎯   ✅ Complete Ticket Management System');
+            console.log('🎯   ✅ Knowledge Base with AI Training Integration');
+            console.log('🎯   ✅ Customer Service Agent Dashboard');
+            console.log('🎯   ✅ Automated Response Suggestions');
+            console.log('🎯   ✅ Sentiment Analysis & Intent Recognition');
+            console.log('🎯   ✅ Multi-channel Support (Web, Mobile, Chat)');
+            console.log('🎯   ✅ AI-Powered Weather Intelligence System');
+            console.log('🎯   ✅ Weather-based Route Planning');
+            console.log('🎯   ✅ Real-time Weather Alerts & Notifications');
+            console.log('🎯   ✅ Weather Chatbot for Travel Planning');
+            console.log('🚀 ================================================================');
+            // Send a test broadcast after 5 seconds to confirm system is working
+            setTimeout(async () => {
+                try {
+                    await realTimeService.sendSystemBroadcast('Sri Express Customer Service & Emergency Alert System is now LIVE and operational! 🎯🚨', 'medium', ['all']);
+                    console.log('✅ Test broadcast sent successfully');
+                }
+                catch (error) {
+                    console.error('❌ Test broadcast failed:', error);
+                }
+            }, 5000);
         });
     }
     catch (error) {
-        console.error("❌ Failed to connect to MongoDB", error);
+        console.error("❌ Failed to start server", error);
         process.exit(1);
     }
 };
-// Call the function to start the server
+// Start the server
 startServer();
