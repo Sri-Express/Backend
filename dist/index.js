@@ -40,6 +40,7 @@ const bookingRoutes_1 = __importDefault(require("./routes/bookingRoutes"));
 const trackingRoutes_1 = __importDefault(require("./routes/trackingRoutes"));
 const paymentRoutes_1 = __importDefault(require("./routes/paymentRoutes"));
 const paymentSimulationRoutes_1 = __importDefault(require("./routes/paymentSimulationRoutes"));
+const fleetRoutes_1 = __importDefault(require("./routes/fleetRoutes")); // ← ADD THIS LINE
 const csRoutes_1 = __importDefault(require("./routes/csRoutes")); // ⭐ NEW - Customer Service Routes
 const weatherRoutes_1 = __importDefault(require("./routes/weatherRoutes")); // ⭐ ADD THIS LINE
 // Import middleware
@@ -325,7 +326,7 @@ app.get('/test', (req, res) => {
     });
 });
 // ============================
-// COMPLETE API ROUTES - ALL SYSTEMS ACTIVE + CUSTOMER SERVICE ⭐
+// COMPLETE API ROUTES - ALL SYSTEMS ACTIVE + FLEET PORTAL
 // ============================
 // Core system routes
 app.use('/api/auth', authRoutes_1.default);
@@ -336,10 +337,12 @@ app.use('/api/routes', routeRoutes_1.default);
 app.use('/api/bookings', bookingRoutes_1.default);
 app.use('/api/tracking', trackingRoutes_1.default);
 app.use('/api/payments', paymentRoutes_1.default);
-// Customer Service routes ⭐ NEW
+// Fleet Portal routes ← NEW
+app.use('/api/fleet', fleetRoutes_1.default); // ← ADD THIS LINE
+// Customer Service routes
 app.use('/api/cs', csRoutes_1.default);
-// Weather routes ⭐ NEW
-app.use('/api/weather', weatherRoutes_1.default); // ⭐ ADD THIS LINE
+// Weather routes
+app.use('/api/weather', weatherRoutes_1.default);
 // Error handling middleware
 app.use(errorMiddleware_1.notFound);
 app.use(errorMiddleware_1.errorHandler);
