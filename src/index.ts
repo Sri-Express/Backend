@@ -38,6 +38,7 @@ import bookingRoutes from './routes/bookingRoutes';
 import trackingRoutes from './routes/trackingRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import paymentSimulationRoutes from './routes/paymentSimulationRoutes';
+import fleetRoutes from './routes/fleetRoutes';  // ← ADD THIS LINE
 import csRoutes from './routes/csRoutes';  // ⭐ NEW - Customer Service Routes
 import weatherRoutes from './routes/weatherRoutes';  // ⭐ ADD THIS LINE
 
@@ -345,7 +346,7 @@ app.get('/test', (req, res) => {
 });
 
 // ============================
-// COMPLETE API ROUTES - ALL SYSTEMS ACTIVE + CUSTOMER SERVICE ⭐
+// COMPLETE API ROUTES - ALL SYSTEMS ACTIVE + FLEET PORTAL
 // ============================
 
 // Core system routes
@@ -359,11 +360,14 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/tracking', trackingRoutes);
 app.use('/api/payments', paymentRoutes);
 
-// Customer Service routes ⭐ NEW
+// Fleet Portal routes ← NEW
+app.use('/api/fleet', fleetRoutes);  // ← ADD THIS LINE
+
+// Customer Service routes
 app.use('/api/cs', csRoutes);
 
-// Weather routes ⭐ NEW
-app.use('/api/weather', weatherRoutes);  // ⭐ ADD THIS LINE
+// Weather routes
+app.use('/api/weather', weatherRoutes);
 
 // Error handling middleware
 app.use(notFound);
