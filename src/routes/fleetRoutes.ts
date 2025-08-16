@@ -1,6 +1,6 @@
 // src/routes/fleetRoutes.ts - Fleet Operator Routes
 import express from 'express';
-import { requireAuth } from '../middleware/authMiddleware';
+import { protect } from '../middleware/authMiddleware'; // <-- CORRECTED
 import { 
   getFleetDashboard,
   getFleetProfile,
@@ -15,7 +15,7 @@ import {
 const router = express.Router();
 
 // Apply authentication middleware to all routes
-router.use(requireAuth);
+router.use(protect); // <-- CORRECTED
 
 // Fleet Dashboard & Profile
 router.get('/dashboard', getFleetDashboard);

@@ -5,11 +5,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 // src/routes/fleetRoutes.ts - Fleet Operator Routes
 const express_1 = __importDefault(require("express"));
-const authMiddleware_1 = require("../middleware/authMiddleware");
+const authMiddleware_1 = require("../middleware/authMiddleware"); // <-- CORRECTED
 const fleetController_1 = require("../controllers/fleetController");
 const router = express_1.default.Router();
 // Apply authentication middleware to all routes
-router.use(authMiddleware_1.requireAuth);
+router.use(authMiddleware_1.protect); // <-- CORRECTED
 // Fleet Dashboard & Profile
 router.get('/dashboard', fleetController_1.getFleetDashboard);
 router.get('/profile', fleetController_1.getFleetProfile);
