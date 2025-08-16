@@ -1,6 +1,10 @@
 // src/routes/fleetRoutes.ts - Fleet Operator Routes
 import express from 'express';
-import { protect } from '../middleware/authMiddleware'; // <-- CORRECTED
+
+// --- CORRECTED IMPORT ---
+// Import the correct middleware from the correct file.
+import { requireFleetManager } from '../middleware/fleetMiddleware';
+
 import { 
   getFleetDashboard,
   getFleetProfile,
@@ -14,10 +18,12 @@ import {
 
 const router = express.Router();
 
-// Apply authentication middleware to all routes
-router.use(protect); // <-- CORRECTED
+// --- CORRECTED MIDDLEWARE USAGE ---
+// This single middleware handles both authentication (is user logged in?)
+// and authorization (is user a fleet manager?).
+router.use(requireFleetManager); 
 
-// Fleet Dashboard & Profile
+// Now all these routes are properly secured
 router.get('/dashboard', getFleetDashboard);
 router.get('/profile', getFleetProfile);
 router.put('/profile', updateFleetProfile);
