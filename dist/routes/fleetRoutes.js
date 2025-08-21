@@ -27,6 +27,9 @@ router.put('/vehicles/:id', fleetController_1.updateVehicle);
 router.delete('/vehicles/:id', fleetController_1.deleteVehicle);
 // Route Management
 router.get('/routes', fleetController_1.getFleetRoutes);
+router.post('/routes', fleetController_1.createFleetRoute);
+router.put('/routes/:id', fleetController_1.updateFleetRoute);
+router.delete('/routes/:id', fleetController_1.deleteFleetRoute);
 // Analytics
 router.get('/analytics', fleetController_1.getFleetAnalytics);
 // Test endpoint to verify routes are working
@@ -46,6 +49,9 @@ router.get('/test', (req, res) => {
             'PUT /api/fleet/vehicles/:id',
             'DELETE /api/fleet/vehicles/:id',
             'GET /api/fleet/routes',
+            'POST /api/fleet/routes',
+            'PUT /api/fleet/routes/:id',
+            'DELETE /api/fleet/routes/:id',
             'GET /api/fleet/analytics',
             'GET /api/fleet/test'
         ]

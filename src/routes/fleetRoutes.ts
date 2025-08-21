@@ -15,6 +15,9 @@ import {
   getVehicleDetails,
   deleteVehicle,
   getFleetRoutes,
+  createFleetRoute,
+  updateFleetRoute,
+  deleteFleetRoute,
   getFleetAnalytics
 } from '../controllers/fleetController';
 
@@ -40,6 +43,9 @@ router.delete('/vehicles/:id', deleteVehicle);
 
 // Route Management
 router.get('/routes', getFleetRoutes);
+router.post('/routes', createFleetRoute);
+router.put('/routes/:id', updateFleetRoute);
+router.delete('/routes/:id', deleteFleetRoute);
 
 // Analytics
 router.get('/analytics', getFleetAnalytics);
@@ -60,6 +66,9 @@ router.get('/test', (req, res) => {
       'PUT /api/fleet/vehicles/:id',
       'DELETE /api/fleet/vehicles/:id',
       'GET /api/fleet/routes',
+      'POST /api/fleet/routes',
+      'PUT /api/fleet/routes/:id',
+      'DELETE /api/fleet/routes/:id',
       'GET /api/fleet/analytics',
       'GET /api/fleet/test'
     ]
