@@ -12,6 +12,8 @@ import {
   getFleetVehicles,
   addVehicle,
   updateVehicle,
+  getVehicleDetails,
+  deleteVehicle,
   getFleetRoutes,
   getFleetAnalytics
 } from '../controllers/fleetController';
@@ -31,7 +33,9 @@ router.put('/profile', updateFleetProfile);
 // Vehicle Management
 router.get('/vehicles', getFleetVehicles);
 router.post('/vehicles', addVehicle);
+router.get('/vehicles/:id', getVehicleDetails);
 router.put('/vehicles/:id', updateVehicle);
+router.delete('/vehicles/:id', deleteVehicle);
 
 // Route Management
 router.get('/routes', getFleetRoutes);

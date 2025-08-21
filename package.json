@@ -8,7 +8,8 @@
     "dev": "nodemon --exec ts-node src/index.ts",
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "seed:fleet": "npx ts-node src/scripts/seedFleetData.ts"
+    "seed:fleet": "npx ts-node src/scripts/seedFleetData.ts",
+    "seed:devices": "npx ts-node src/scripts/seedDeviceData.ts"
   },
   "keywords": [
     "transportation",

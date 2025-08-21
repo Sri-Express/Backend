@@ -2,6 +2,7 @@
 import express from 'express';
 import { protect } from '../middleware/authMiddleware';
 import { requireSystemAdmin } from '../middleware/adminMiddleware';
+import { optionalFleetManager } from '../middleware/fleetMiddleware';
 import {
   getRoutes,
   searchRoutes,
@@ -16,12 +17,12 @@ import {
 
 const router = express.Router();
 
-// Public routes
-router.get('/', getRoutes);
-router.get('/search', searchRoutes);
-router.get('/:id', getRouteById);
-router.get('/:id/schedules', getRouteSchedules);
-router.get('/:id/realtime', getRouteRealTime);
+// Public routes (with optional authentication for better experience)
+router.get('/', optionalFleetManager, getRoutes);
+router.get('/search', optionalFleetManager, searchRoutes);
+router.get('/:id', optionalFleetManager, getRouteById);
+router.get('/:id/schedules', optionalFleetManager, getRouteSchedules);
+router.get('/:id/realtime', optionalFleetManager, getRouteRealTime);
 
 // Admin routes (protected)
 router.post('/', requireSystemAdmin, createRoute);

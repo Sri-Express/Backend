@@ -1,6 +1,7 @@
 // src/routes/adminRoutes.ts - FIXED ADMIN ROUTES WITH GPS SIMULATION
 import express from 'express';
 import { requireSystemAdmin } from '../middleware/adminMiddleware';
+import { protect } from '../middleware/authMiddleware'; // Add this import
 import Emergency from '../models/Emergency'; // Assuming Emergency model path
 
 // User management controllers
@@ -23,33 +24,8 @@ import { getSimulationStatus, startSimulation, stopSimulation, setSimulationSpee
 
 const router = express.Router();
 
-// Apply authentication middleware to all routes
-router.use(requireSystemAdmin);
-
-// ============================
-// USER MANAGEMENT ROUTES
-// ============================
-router.get('/users', getAllUsers); router.get('/users/stats', getUserStats); router.post('/users', createUser); router.get('/users/:id/stats', getUserStatistics); router.get('/users/:id/activity', getUserActivity); router.get('/users/:id/timeline', getUserTimeline); router.patch('/users/:id/toggle-status', toggleUserStatus); router.get('/users/:id', getUserById); router.put('/users/:id', updateUser); router.delete('/users/:id', deleteUser);
-
-// ============================
-// DEVICE MANAGEMENT ROUTES
-// ============================
-router.get('/devices', getAllDevices); router.get('/devices/stats', getDeviceStats); router.post('/devices', createDevice); router.put('/devices/:id/location', updateDeviceLocation); router.post('/devices/:id/alerts', addDeviceAlert); router.delete('/devices/:id/alerts', clearDeviceAlerts); router.get('/devices/:id', getDeviceById); router.put('/devices/:id', updateDevice); router.delete('/devices/:id', deleteDevice);
-
-// ============================
-// SYSTEM MANAGEMENT ROUTES
-// ============================
-router.get('/system/stats', getSystemStats); router.get('/system/health', getSystemHealth); router.get('/system/alerts', getSystemAlerts); router.get('/system/analytics', getSystemAnalytics); router.put('/system/settings', updateSystemSettings);
-
-router.get('/system/audit', async (req, res) => { try { res.json({ message: 'System audit logs endpoint', totalLogs: 15420, recentActivity: 247, criticalEvents: 3, implementation: 'UserActivity aggregation pending' }); } catch (error) { res.status(500).json({ message: 'Server error' }); } });
-
-// ============================
-// EMERGENCY MANAGEMENT ROUTES
-// ============================
-router.get('/emergency', getEmergencyDashboard); router.post('/emergency/alert', createEmergencyAlert); router.get('/emergency/incidents', getAllIncidents); router.post('/emergency/broadcast', sendEmergencyBroadcast); router.get('/emergency/teams', getEmergencyTeams); router.put('/emergency/:id/resolve', resolveEmergency);
-
-// Add this route for users to get their alerts
-router.get('/emergency/user-alerts', async (req, res) => {
+// Public emergency alerts route (before admin middleware)
+router.get('/emergency/user-alerts', protect, async (req, res) => {
   try {
     // Get recent emergency alerts that should be visible to users
     const alerts = await Emergency.find({
@@ -82,6 +58,31 @@ router.get('/emergency/user-alerts', async (req, res) => {
     res.status(500).json({ message: 'Server error', error: (error as Error).message });
   }
 });
+
+// Apply authentication middleware to all admin routes below this point
+router.use(requireSystemAdmin);
+
+// ============================
+// USER MANAGEMENT ROUTES
+// ============================
+router.get('/users', getAllUsers); router.get('/users/stats', getUserStats); router.post('/users', createUser); router.get('/users/:id/stats', getUserStatistics); router.get('/users/:id/activity', getUserActivity); router.get('/users/:id/timeline', getUserTimeline); router.patch('/users/:id/toggle-status', toggleUserStatus); router.get('/users/:id', getUserById); router.put('/users/:id', updateUser); router.delete('/users/:id', deleteUser);
+
+// ============================
+// DEVICE MANAGEMENT ROUTES
+// ============================
+router.get('/devices', getAllDevices); router.get('/devices/stats', getDeviceStats); router.post('/devices', createDevice); router.put('/devices/:id/location', updateDeviceLocation); router.post('/devices/:id/alerts', addDeviceAlert); router.delete('/devices/:id/alerts', clearDeviceAlerts); router.get('/devices/:id', getDeviceById); router.put('/devices/:id', updateDevice); router.delete('/devices/:id', deleteDevice);
+
+// ============================
+// SYSTEM MANAGEMENT ROUTES
+// ============================
+router.get('/system/stats', getSystemStats); router.get('/system/health', getSystemHealth); router.get('/system/alerts', getSystemAlerts); router.get('/system/analytics', getSystemAnalytics); router.put('/system/settings', updateSystemSettings);
+
+router.get('/system/audit', async (req, res) => { try { res.json({ message: 'System audit logs endpoint', totalLogs: 15420, recentActivity: 247, criticalEvents: 3, implementation: 'UserActivity aggregation pending' }); } catch (error) { res.status(500).json({ message: 'Server error' }); } });
+
+// ============================
+// EMERGENCY MANAGEMENT ROUTES
+// ============================
+router.get('/emergency', getEmergencyDashboard); router.post('/emergency/alert', createEmergencyAlert); router.get('/emergency/incidents', getAllIncidents); router.post('/emergency/broadcast', sendEmergencyBroadcast); router.get('/emergency/teams', getEmergencyTeams); router.put('/emergency/:id/resolve', resolveEmergency);
 
 // ============================
 // GPS SIMULATION ROUTES
