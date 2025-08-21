@@ -49,7 +49,7 @@ const DeviceSchema = new mongoose_1.Schema({
     },
     vehicleType: {
         type: String,
-        enum: ['bus', 'train'],
+        enum: ['bus', 'train', 'van', 'minibus'],
         required: [true, 'Vehicle type is required'],
     },
     status: {

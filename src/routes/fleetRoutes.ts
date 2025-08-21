@@ -29,6 +29,7 @@ router.use(requireFleetManager);
 router.get('/dashboard', getFleetDashboard);
 router.get('/profile', getFleetProfile);
 router.put('/profile', updateFleetProfile);
+router.post('/profile', updateFleetProfile); // Allow POST for creating new profiles
 
 // Vehicle Management
 router.get('/vehicles', getFleetVehicles);
@@ -42,5 +43,27 @@ router.get('/routes', getFleetRoutes);
 
 // Analytics
 router.get('/analytics', getFleetAnalytics);
+
+// Test endpoint to verify routes are working
+router.get('/test', (req, res) => {
+  res.json({
+    message: 'Fleet routes are working properly!',
+    user: req.user?.name || 'Unknown',
+    timestamp: new Date().toISOString(),
+    availableRoutes: [
+      'GET /api/fleet/dashboard',
+      'GET /api/fleet/profile',
+      'PUT /api/fleet/profile',
+      'GET /api/fleet/vehicles',
+      'POST /api/fleet/vehicles',
+      'GET /api/fleet/vehicles/:id',
+      'PUT /api/fleet/vehicles/:id',
+      'DELETE /api/fleet/vehicles/:id',
+      'GET /api/fleet/routes',
+      'GET /api/fleet/analytics',
+      'GET /api/fleet/test'
+    ]
+  });
+});
 
 export default router;

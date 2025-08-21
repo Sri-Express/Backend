@@ -99,7 +99,46 @@ router.get('/analytics/security', async (req, res) => { try { res.json({ message
 // ============================
 // FLEET MANAGEMENT ROUTES
 // ============================
-router.get('/fleet', getAllFleets); router.get('/fleet/stats', getFleetStats); router.get('/fleet/inspections', getInspectionsDue); router.get('/fleet/compliance', getComplianceIssues); router.post('/fleet', createFleet); router.get('/fleet/:id', getFleetById); router.put('/fleet/:id', updateFleet); router.put('/fleet/:id/approve', approveFleet); router.put('/fleet/:id/reject', rejectFleet); router.put('/fleet/:id/suspend', suspendFleet); router.put('/fleet/:id/reactivate', reactivateFleet); router.delete('/fleet/:id', deleteFleet);
+router.get('/fleet', getAllFleets); 
+router.get('/fleet/stats', getFleetStats); 
+router.get('/fleet/inspections', getInspectionsDue); 
+router.get('/fleet/compliance', getComplianceIssues); 
+router.post('/fleet', createFleet); 
+router.get('/fleet/:id', getFleetById); 
+router.put('/fleet/:id', updateFleet); 
+router.put('/fleet/:id/approve', approveFleet); 
+router.put('/fleet/:id/reject', rejectFleet); 
+router.put('/fleet/:id/suspend', suspendFleet); 
+router.put('/fleet/:id/reactivate', reactivateFleet); 
+router.delete('/fleet/:id', deleteFleet);
+
+// Test route for fleet admin endpoints
+router.get('/fleet/test/endpoints', async (req, res) => {
+  try {
+    res.json({
+      message: 'Fleet admin endpoints are working!',
+      timestamp: new Date().toISOString(),
+      availableEndpoints: [
+        'GET /api/admin/fleet - Get all fleets',
+        'GET /api/admin/fleet/stats - Fleet statistics',
+        'GET /api/admin/fleet/inspections - Inspections due',
+        'GET /api/admin/fleet/compliance - Compliance issues',
+        'POST /api/admin/fleet - Create fleet',
+        'GET /api/admin/fleet/:id - Get fleet by ID',
+        'PUT /api/admin/fleet/:id - Update fleet',
+        'PUT /api/admin/fleet/:id/approve - Approve fleet',
+        'PUT /api/admin/fleet/:id/reject - Reject fleet',
+        'PUT /api/admin/fleet/:id/suspend - Suspend fleet',
+        'PUT /api/admin/fleet/:id/reactivate - Reactivate fleet',
+        'DELETE /api/admin/fleet/:id - Delete fleet',
+        'GET /api/admin/fleet/test/endpoints - This test endpoint'
+      ],
+      totalEndpoints: 13
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: (error as Error).message });
+  }
+});
 
 // ============================
 // AI MODULE ROUTES

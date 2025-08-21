@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // src/routes/adminRoutes.ts - FIXED ADMIN ROUTES WITH GPS SIMULATION
 const express_1 = __importDefault(require("express"));
 const adminMiddleware_1 = require("../middleware/adminMiddleware");
+const authMiddleware_1 = require("../middleware/authMiddleware"); // Add this import
 const Emergency_1 = __importDefault(require("../models/Emergency")); // Assuming Emergency model path
 // User management controllers
 const adminUserController_1 = require("../controllers/adminUserController");
@@ -20,7 +21,40 @@ const adminFleetController_1 = require("../controllers/adminFleetController");
 // GPS Simulation controllers
 const simulationController_1 = require("../controllers/simulationController");
 const router = express_1.default.Router();
-// Apply authentication middleware to all routes
+// Public emergency alerts route (before admin middleware)
+router.get('/emergency/user-alerts', authMiddleware_1.protect, async (req, res) => {
+    try {
+        // Get recent emergency alerts that should be visible to users
+        const alerts = await Emergency_1.default.find({
+            isActive: true,
+            createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Last 24 hours
+            $or: [
+                { priority: { $in: ['critical', 'high', 'medium'] } },
+                { type: 'broadcast' }
+            ]
+        })
+            .sort({ createdAt: -1 })
+            .limit(50)
+            .select('incidentId title description type priority createdAt location');
+        // Transform to alert format
+        const formattedAlerts = alerts.map(emergency => ({
+            id: `emergency_${emergency._id}`,
+            type: emergency.type === 'system' ? 'broadcast' : 'emergency_created',
+            title: emergency.title,
+            message: emergency.description,
+            priority: emergency.priority,
+            timestamp: emergency.createdAt,
+            recipients: emergency.priority === 'low' ? ['admins'] : ['all'],
+            emergency: emergency,
+            read: false
+        }));
+        res.json({ alerts: formattedAlerts });
+    }
+    catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+});
+// Apply authentication middleware to all admin routes below this point
 router.use(adminMiddleware_1.requireSystemAdmin);
 // ============================
 // USER MANAGEMENT ROUTES
@@ -70,39 +104,6 @@ router.get('/emergency/incidents', adminEmergencyController_1.getAllIncidents);
 router.post('/emergency/broadcast', adminEmergencyController_1.sendEmergencyBroadcast);
 router.get('/emergency/teams', adminEmergencyController_1.getEmergencyTeams);
 router.put('/emergency/:id/resolve', adminEmergencyController_1.resolveEmergency);
-// Add this route for users to get their alerts
-router.get('/emergency/user-alerts', async (req, res) => {
-    try {
-        // Get recent emergency alerts that should be visible to users
-        const alerts = await Emergency_1.default.find({
-            isActive: true,
-            createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Last 24 hours
-            $or: [
-                { priority: { $in: ['critical', 'high', 'medium'] } },
-                { type: 'broadcast' }
-            ]
-        })
-            .sort({ createdAt: -1 })
-            .limit(50)
-            .select('incidentId title description type priority createdAt location');
-        // Transform to alert format
-        const formattedAlerts = alerts.map(emergency => ({
-            id: `emergency_${emergency._id}`,
-            type: emergency.type === 'system' ? 'broadcast' : 'emergency_created',
-            title: emergency.title,
-            message: emergency.description,
-            priority: emergency.priority,
-            timestamp: emergency.createdAt,
-            recipients: emergency.priority === 'low' ? ['admins'] : ['all'],
-            emergency: emergency,
-            read: false
-        }));
-        res.json({ alerts: formattedAlerts });
-    }
-    catch (error) {
-        res.status(500).json({ message: 'Server error', error: error.message });
-    }
-});
 // ============================
 // GPS SIMULATION ROUTES
 // ============================
@@ -145,6 +146,34 @@ router.put('/fleet/:id/reject', adminFleetController_1.rejectFleet);
 router.put('/fleet/:id/suspend', adminFleetController_1.suspendFleet);
 router.put('/fleet/:id/reactivate', adminFleetController_1.reactivateFleet);
 router.delete('/fleet/:id', adminFleetController_1.deleteFleet);
+// Test route for fleet admin endpoints
+router.get('/fleet/test/endpoints', async (req, res) => {
+    try {
+        res.json({
+            message: 'Fleet admin endpoints are working!',
+            timestamp: new Date().toISOString(),
+            availableEndpoints: [
+                'GET /api/admin/fleet - Get all fleets',
+                'GET /api/admin/fleet/stats - Fleet statistics',
+                'GET /api/admin/fleet/inspections - Inspections due',
+                'GET /api/admin/fleet/compliance - Compliance issues',
+                'POST /api/admin/fleet - Create fleet',
+                'GET /api/admin/fleet/:id - Get fleet by ID',
+                'PUT /api/admin/fleet/:id - Update fleet',
+                'PUT /api/admin/fleet/:id/approve - Approve fleet',
+                'PUT /api/admin/fleet/:id/reject - Reject fleet',
+                'PUT /api/admin/fleet/:id/suspend - Suspend fleet',
+                'PUT /api/admin/fleet/:id/reactivate - Reactivate fleet',
+                'DELETE /api/admin/fleet/:id - Delete fleet',
+                'GET /api/admin/fleet/test/endpoints - This test endpoint'
+            ],
+            totalEndpoints: 13
+        });
+    }
+    catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+});
 // ============================
 // AI MODULE ROUTES
 // ============================

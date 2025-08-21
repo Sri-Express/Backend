@@ -93,16 +93,50 @@ export const getFleetDashboard = async (req: Request, res: Response): Promise<vo
 // @access  Private (Fleet Manager)
 export const getFleetProfile = async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log('🔍 Fleet profile - User:', req.user?.email, 'Role:', req.user?.role);
+    
     const fleet = await Fleet.findOne({ 
       email: req.user?.email,
       isActive: true 
     });
 
     if (!fleet) {
-      res.status(404).json({ message: 'Fleet not found' });
+      console.log('❌ Fleet profile - No fleet found for user:', req.user?.email);
+      
+      // Create a default fleet profile for the user if they don't have one
+      const defaultFleet = {
+        _id: 'temp-fleet-id',
+        companyName: `${req.user?.name || 'Fleet Manager'}'s Company`,
+        registrationNumber: 'PENDING-REGISTRATION',
+        contactPerson: req.user?.name || 'Fleet Manager',
+        email: req.user?.email || '',
+        phone: '',
+        address: '',
+        status: 'pending',
+        complianceScore: 0,
+        totalVehicles: 0,
+        activeVehicles: 0,
+        operatingRoutes: [],
+        applicationDate: new Date(),
+        documents: {
+          businessLicense: false,
+          insuranceCertificate: false,
+          vehicleRegistrations: false,
+          driverLicenses: false
+        },
+        isActive: true,
+        isTemporary: true // Flag to indicate this is a temporary profile
+      };
+      
+      res.json({ 
+        fleet: defaultFleet,
+        message: 'No fleet profile found. Please complete your fleet registration.',
+        isTemporary: true
+      });
       return;
     }
 
+    console.log('✅ Fleet profile - Found fleet:', fleet.companyName);
     res.json({ fleet });
   } catch (error) {
     console.error('Get fleet profile error:', error);
@@ -118,7 +152,10 @@ export const getFleetProfile = async (req: Request, res: Response): Promise<void
 // @access  Private (Fleet Manager)
 export const updateFleetProfile = async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log('🔍 Fleet profile update - User:', req.user?.email);
     const { 
+      companyName,
+      registrationNumber,
       contactPerson, 
       phone, 
       address, 
@@ -126,24 +163,101 @@ export const updateFleetProfile = async (req: Request, res: Response): Promise<v
       operationalInfo 
     } = req.body;
 
-    const fleet = await Fleet.findOne({ 
+    let fleet = await Fleet.findOne({ 
       email: req.user?.email,
       isActive: true 
     });
 
     if (!fleet) {
-      res.status(404).json({ message: 'Fleet not found' });
+      console.log('🔍 Fleet profile update - No fleet found, creating new one');
+      
+      // Create new fleet if it doesn't exist
+      if (!companyName || !registrationNumber || !contactPerson) {
+        res.status(400).json({ 
+          message: 'Company name, registration number, and contact person are required for new fleet registration' 
+        });
+        return;
+      }
+
+      // Check if registration number already exists
+      const existingFleet = await Fleet.findOne({ 
+        registrationNumber: registrationNumber.trim(),
+        isActive: true 
+      });
+      
+      if (existingFleet) {
+        res.status(400).json({ 
+          message: 'Registration number already exists' 
+        });
+        return;
+      }
+
+      // Create new fleet
+      const fleetData = {
+        companyName: companyName.trim(),
+        registrationNumber: registrationNumber.trim(),
+        contactPerson: contactPerson.trim(),
+        email: req.user?.email || '',
+        phone: phone || '',
+        address: address || '',
+        operatingRoutes: operatingRoutes || [],
+        operationalInfo: operationalInfo || {},
+        status: 'pending', // New fleets start as pending
+        complianceScore: 0,
+        totalVehicles: 0,
+        activeVehicles: 0,
+        applicationDate: new Date(),
+        documents: {
+          businessLicense: false,
+          insuranceCertificate: false,
+          vehicleRegistrations: false,
+          driverLicenses: false
+        },
+        isActive: true
+      };
+
+      fleet = await Fleet.create(fleetData);
+      console.log('✅ Fleet profile update - Created new fleet:', fleet.companyName);
+
+      res.status(201).json({
+        message: 'Fleet profile created successfully',
+        fleet
+      });
       return;
     }
 
-    // Only allow certain fields to be updated
-    if (contactPerson) fleet.contactPerson = contactPerson;
+    // Update existing fleet - only allow certain fields to be updated
+    console.log('🔍 Fleet profile update - Updating existing fleet:', fleet.companyName);
+
+    if (companyName) fleet.companyName = companyName.trim();
+    if (contactPerson) fleet.contactPerson = contactPerson.trim();
     if (phone) fleet.phone = phone;
     if (address) fleet.address = address;
     if (operatingRoutes) fleet.operatingRoutes = operatingRoutes;
-    if (operationalInfo) fleet.operationalInfo = { ...fleet.operationalInfo, ...operationalInfo };
+    if (operationalInfo) {
+      fleet.operationalInfo = { ...fleet.operationalInfo, ...operationalInfo };
+    }
+
+    // Check if registration number is being changed and already exists
+    if (registrationNumber && registrationNumber.trim() !== fleet.registrationNumber) {
+      const existingFleet = await Fleet.findOne({ 
+        registrationNumber: registrationNumber.trim(),
+        _id: { $ne: fleet._id },
+        isActive: true 
+      });
+      
+      if (existingFleet) {
+        res.status(400).json({ 
+          message: 'Registration number already in use by another fleet' 
+        });
+        return;
+      }
+      
+      fleet.registrationNumber = registrationNumber.trim();
+    }
 
     await fleet.save();
+    console.log('✅ Fleet profile update - Updated successfully');
 
     res.json({
       message: 'Fleet profile updated successfully',
@@ -151,6 +265,25 @@ export const updateFleetProfile = async (req: Request, res: Response): Promise<v
     });
   } catch (error) {
     console.error('Update fleet profile error:', error);
+    
+    // Handle validation errors
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ValidationError') {
+      const validationErrors = Object.values((error as any).errors).map((err: any) => err.message);
+      res.status(400).json({ 
+        message: 'Validation error', 
+        errors: validationErrors 
+      });
+      return;
+    }
+
+    // Handle duplicate key errors
+    if (error && typeof error === 'object' && 'code' in error && (error as any).code === 11000) {
+      res.status(400).json({ 
+        message: 'Registration number already exists' 
+      });
+      return;
+    }
+
     res.status(500).json({ 
       message: 'Server error', 
       error: error instanceof Error ? error.message : 'Unknown error' 

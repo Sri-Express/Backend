@@ -452,6 +452,7 @@ const startServer = async () => {
       console.log('📍   📊 Enhanced Dashboard: http://localhost:' + PORT + '/api/dashboard/*');
       console.log('📍   ⚙️  Complete Admin: http://localhost:' + PORT + '/api/admin/*');
       console.log('📍   🛣️  Route Management: http://localhost:' + PORT + '/api/routes/*');
+      console.log('📍   🚛 Fleet Portal: http://localhost:' + PORT + '/api/fleet/*');
       console.log('📍   🎫 Booking System: http://localhost:' + PORT + '/api/bookings/*');
       console.log('📍   📍 Live Tracking: http://localhost:' + PORT + '/api/tracking/*');
       console.log('📍   💳 Payment Processing: http://localhost:' + PORT + '/api/payments/*');
