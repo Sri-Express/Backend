@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getPaymentStats = exports.getPaymentMethods = exports.getPaymentHistory = exports.processRefund = exports.getPaymentById = exports.processPayment = void 0;
+exports.getPaymentStats = exports.getPaymentMethods = exports.getPaymentHistory = exports.processRefund = exports.getPaymentById = exports.confirmPayment = exports.processPayment = void 0;
 const Payment_1 = __importDefault(require("../models/Payment"));
 const Booking_1 = __importDefault(require("../models/Booking"));
 // @desc    Process payment
@@ -15,67 +15,229 @@ const processPayment = async (req, res) => {
             res.status(401).json({ message: 'Not authorized' });
             return;
         }
-        const { bookingId, paymentMethod, billingInfo, cardInfo } = req.body;
-        if (!bookingId || !paymentMethod || !billingInfo) {
-            res.status(400).json({ message: 'Missing required payment information' });
+        const { bookingId, paymentMethod, billingInfo, cardInfo, amount, transactionId, status } = req.body;
+        console.log('💳 Processing payment:', { bookingId, paymentMethod, amount, transactionId, status });
+        if (!bookingId) {
+            res.status(400).json({ message: 'Booking ID is required' });
             return;
         }
-        // Get booking information
-        const booking = await Booking_1.default.findById(bookingId);
+        // 🔥 FIXED: Find booking by bookingId (not MongoDB _id)
+        let booking = await Booking_1.default.findOne({
+            $or: [
+                { bookingId: bookingId },
+                { _id: bookingId }
+            ]
+        });
         if (!booking) {
+            console.error('❌ Booking not found for ID:', bookingId);
             res.status(404).json({ message: 'Booking not found' });
             return;
         }
+        console.log('✅ Found booking:', booking.bookingId, 'Current status:', booking.status);
         // Check if user owns this booking
         if (booking.userId.toString() !== req.user._id.toString()) {
             res.status(403).json({ message: 'Not authorized to pay for this booking' });
             return;
         }
-        // Check if booking is already paid
-        if (booking.paymentInfo.status === 'completed') {
-            res.status(400).json({ message: 'Booking is already paid' });
-            return;
-        }
-        // Process payment based on method
+        // 🔥 FIXED: Handle both new payments and payment confirmations
         let paymentResult;
-        try {
-            switch (paymentMethod.type) {
-                case 'card':
-                    paymentResult = await processCardPayment(cardInfo, booking.pricing.totalAmount);
-                    break;
-                case 'mobile':
-                    paymentResult = await processMobilePayment(paymentMethod.provider, booking.pricing.totalAmount);
-                    break;
-                case 'bank':
-                    paymentResult = await processBankTransfer(paymentMethod.bankInfo, booking.pricing.totalAmount);
-                    break;
-                default: throw new Error('Unsupported payment method');
+        if (status === 'completed' && transactionId) {
+            // This is a payment confirmation from the frontend (payment already processed)
+            console.log('💎 Confirming completed payment:', transactionId);
+            paymentResult = {
+                success: true,
+                transactionId: transactionId,
+                authorizationCode: `CONFIRMED_${Math.random().toString(36).substr(2, 9)}`,
+                gatewayResponse: {
+                    status: 'confirmed',
+                    message: 'Payment confirmed successfully'
+                }
+            };
+        }
+        else {
+            // This is a new payment request (process payment)
+            console.log('🚀 Processing new payment...');
+            if (!paymentMethod || !billingInfo) {
+                res.status(400).json({ message: 'Missing required payment information' });
+                return;
+            }
+            // Check if booking is already paid
+            if (booking.paymentInfo.status === 'completed') {
+                res.status(400).json({ message: 'Booking is already paid' });
+                return;
+            }
+            // Process payment based on method
+            try {
+                switch (paymentMethod.type || paymentMethod) {
+                    case 'card':
+                        paymentResult = await processCardPayment(cardInfo, booking.pricing.totalAmount);
+                        break;
+                    case 'mobile':
+                    case 'digital_wallet':
+                        paymentResult = await processMobilePayment(paymentMethod.provider || 'digital_wallet', booking.pricing.totalAmount);
+                        break;
+                    case 'bank':
+                        paymentResult = await processBankTransfer(paymentMethod.bankInfo || {}, booking.pricing.totalAmount);
+                        break;
+                    default:
+                        throw new Error('Unsupported payment method');
+                }
+            }
+            catch (paymentError) {
+                console.error('💥 Payment processing failed:', paymentError);
+                res.status(400).json({
+                    message: 'Payment processing failed',
+                    error: paymentError instanceof Error ? paymentError.message : 'Payment error'
+                });
+                return;
             }
         }
-        catch (paymentError) {
-            res.status(400).json({ message: 'Payment processing failed', error: paymentError instanceof Error ? paymentError.message : 'Payment error' });
-            return;
+        // 🔥 FIXED: Create or update payment record
+        let payment;
+        // Check if payment record already exists
+        const existingPayment = await Payment_1.default.findOne({
+            $or: [
+                { transactionId: transactionId },
+                { bookingId: booking._id }
+            ]
+        });
+        if (existingPayment && status === 'completed') {
+            // Update existing payment
+            console.log('🔄 Updating existing payment record...');
+            existingPayment.status = 'completed';
+            existingPayment.transactionInfo.gatewayResponse = paymentResult.gatewayResponse;
+            await existingPayment.save();
+            payment = existingPayment;
         }
-        // Create payment record
-        const payment = new Payment_1.default({ userId: req.user._id, bookingId: booking._id, amount: { subtotal: booking.pricing.basePrice, taxes: booking.pricing.taxes, fees: 0, discounts: booking.pricing.discounts, total: booking.pricing.totalAmount, currency: booking.pricing.currency }, paymentMethod, transactionInfo: { transactionId: paymentResult.transactionId, gatewayResponse: paymentResult.gatewayResponse, authorizationCode: paymentResult.authorizationCode }, billingInfo, status: paymentResult.success ? 'completed' : 'failed' });
-        await payment.save();
-        // Update booking payment status
+        else {
+            // Create new payment record
+            console.log('📝 Creating new payment record...');
+            const paymentData = {
+                userId: req.user._id,
+                bookingId: booking._id,
+                amount: {
+                    subtotal: booking.pricing.basePrice,
+                    taxes: booking.pricing.taxes,
+                    fees: 0,
+                    discounts: booking.pricing.discounts,
+                    total: booking.pricing.totalAmount,
+                    currency: booking.pricing.currency
+                },
+                paymentMethod: {
+                    type: paymentMethod.type || paymentMethod,
+                    provider: 'Sri Express Payment'
+                },
+                transactionInfo: {
+                    transactionId: paymentResult.transactionId,
+                    gatewayResponse: paymentResult.gatewayResponse,
+                    authorizationCode: paymentResult.authorizationCode
+                },
+                billingInfo: billingInfo || {
+                    name: booking.passengerInfo.name,
+                    email: booking.passengerInfo.email,
+                    phone: booking.passengerInfo.phone
+                },
+                status: paymentResult.success ? 'completed' : 'failed'
+            };
+            payment = new Payment_1.default(paymentData);
+            await payment.save();
+        }
+        // 🔥 FIXED: Always update booking status if payment successful
         if (paymentResult.success) {
+            console.log('✅ Payment successful, updating booking status...');
             booking.paymentInfo.status = 'completed';
-            // ✅ FIXED: Cast payment._id to proper ObjectId type
             booking.paymentInfo.paymentId = payment._id;
             booking.paymentInfo.paidAt = new Date();
+            booking.paymentInfo.transactionId = paymentResult.transactionId;
             booking.status = 'confirmed';
             await booking.save();
+            console.log('🎫 Booking status updated to confirmed:', booking.bookingId);
         }
-        res.status(201).json({ message: paymentResult.success ? 'Payment processed successfully' : 'Payment failed', payment: { id: payment._id, paymentId: payment.paymentId, status: payment.status, amount: payment.amount, transactionId: payment.transactionInfo.transactionId }, booking: paymentResult.success ? { id: booking._id, status: booking.status, qrCode: booking.qrCode } : null });
+        res.status(201).json({
+            message: paymentResult.success ? 'Payment processed successfully' : 'Payment failed',
+            payment: {
+                id: payment._id,
+                paymentId: payment.paymentId,
+                status: payment.status,
+                amount: payment.amount,
+                transactionId: payment.transactionInfo.transactionId
+            },
+            booking: paymentResult.success ? {
+                id: booking._id,
+                bookingId: booking.bookingId,
+                status: booking.status,
+                paymentStatus: booking.paymentInfo.status,
+                qrCode: booking.qrCode
+            } : null
+        });
     }
     catch (error) {
-        console.error('Process payment error:', error);
-        res.status(500).json({ message: 'Server error', error: error instanceof Error ? error.message : 'Unknown error' });
+        console.error('💥 Process payment error:', error);
+        res.status(500).json({
+            message: 'Server error',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
     }
 };
 exports.processPayment = processPayment;
+// 🔥 NEW: Add endpoint to confirm existing payments
+// @desc    Confirm payment completion (for frontend-initiated payments)
+// @route   POST /api/payments/confirm
+// @access  Private
+const confirmPayment = async (req, res) => {
+    try {
+        if (!req.user) {
+            res.status(401).json({ message: 'Not authorized' });
+            return;
+        }
+        const { bookingId, transactionId, paymentData } = req.body;
+        console.log('🔍 Confirming payment:', { bookingId, transactionId });
+        if (!bookingId || !transactionId) {
+            res.status(400).json({ message: 'Booking ID and Transaction ID are required' });
+            return;
+        }
+        // Find the booking
+        const booking = await Booking_1.default.findOne({
+            $or: [
+                { bookingId: bookingId },
+                { _id: bookingId }
+            ]
+        });
+        if (!booking) {
+            res.status(404).json({ message: 'Booking not found' });
+            return;
+        }
+        // Check ownership
+        if (booking.userId.toString() !== req.user._id.toString()) {
+            res.status(403).json({ message: 'Not authorized' });
+            return;
+        }
+        // Update booking status
+        booking.status = 'confirmed';
+        booking.paymentInfo.status = 'completed';
+        booking.paymentInfo.transactionId = transactionId;
+        booking.paymentInfo.paidAt = new Date();
+        await booking.save();
+        console.log('✅ Payment confirmed and booking updated:', booking.bookingId);
+        res.json({
+            message: 'Payment confirmed successfully',
+            booking: {
+                id: booking._id,
+                bookingId: booking.bookingId,
+                status: booking.status,
+                paymentStatus: booking.paymentInfo.status
+            }
+        });
+    }
+    catch (error) {
+        console.error('💥 Confirm payment error:', error);
+        res.status(500).json({
+            message: 'Server error',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+};
+exports.confirmPayment = confirmPayment;
 // @desc    Get payment by ID
 // @route   GET /api/payments/:id
 // @access  Private
@@ -235,13 +397,42 @@ exports.getPaymentStats = getPaymentStats;
 // Helper functions for payment processing
 async function processCardPayment(cardInfo, amount) {
     // Mock card payment processing - In real implementation, integrate with payment gateway (Stripe, PayHere, etc.)
-    return { success: true, transactionId: `TXN_CARD_${Date.now()}`, authorizationCode: `AUTH_${Math.random().toString(36).substr(2, 9)}`, gatewayResponse: { status: 'approved', message: 'Payment processed successfully' } };
+    console.log('💳 Processing card payment for amount:', amount);
+    return {
+        success: true,
+        transactionId: `TXN_CARD_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        authorizationCode: `AUTH_${Math.random().toString(36).substr(2, 9)}`,
+        gatewayResponse: {
+            status: 'approved',
+            message: 'Card payment processed successfully'
+        }
+    };
 }
 async function processMobilePayment(provider, amount) {
     // Mock mobile payment processing
-    return { success: true, transactionId: `TXN_${provider.toUpperCase()}_${Date.now()}`, authorizationCode: `MOBILE_${Math.random().toString(36).substr(2, 9)}`, gatewayResponse: { status: 'approved', provider, message: 'Mobile payment processed successfully' } };
+    console.log('📱 Processing mobile payment via:', provider, 'for amount:', amount);
+    return {
+        success: true,
+        transactionId: `TXN_${provider.toUpperCase()}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        authorizationCode: `MOBILE_${Math.random().toString(36).substr(2, 9)}`,
+        gatewayResponse: {
+            status: 'approved',
+            provider,
+            message: 'Mobile payment processed successfully'
+        }
+    };
 }
 async function processBankTransfer(bankInfo, amount) {
     // Mock bank transfer processing
-    return { success: true, transactionId: `TXN_BANK_${Date.now()}`, authorizationCode: `BANK_${Math.random().toString(36).substr(2, 9)}`, gatewayResponse: { status: 'approved', bank: bankInfo.bankName, message: 'Bank transfer initiated successfully' } };
+    console.log('🏦 Processing bank transfer for amount:', amount);
+    return {
+        success: true,
+        transactionId: `TXN_BANK_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        authorizationCode: `BANK_${Math.random().toString(36).substr(2, 9)}`,
+        gatewayResponse: {
+            status: 'approved',
+            bank: bankInfo.bankName || 'Unknown Bank',
+            message: 'Bank transfer initiated successfully'
+        }
+    };
 }

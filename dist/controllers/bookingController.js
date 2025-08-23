@@ -61,7 +61,7 @@ const createBooking = async (req, res) => {
         }
         console.log('🎫 Creating booking for user:', req.user._id);
         console.log('📋 Booking request data:', req.body);
-        const { routeId, scheduleId, travelDate, departureTime, passengerInfo, seatInfo, paymentMethod } = req.body;
+        const { routeId, scheduleId, travelDate, departureTime, passengerInfo, seatInfo, paymentMethod, status, paymentInfo } = req.body;
         // ✅ FIXED: Enhanced validation
         if (!routeId || !scheduleId || !travelDate || !departureTime || !passengerInfo || !seatInfo || !paymentMethod) {
             console.error('❌ Missing required fields:', { routeId: !!routeId, scheduleId: !!scheduleId, travelDate: !!travelDate, departureTime: !!departureTime, passengerInfo: !!passengerInfo, seatInfo: !!seatInfo, paymentMethod: !!paymentMethod });
@@ -135,9 +135,12 @@ const createBooking = async (req, res) => {
             },
             paymentInfo: {
                 method: paymentMethod,
-                status: 'pending'
+                status: (paymentInfo === null || paymentInfo === void 0 ? void 0 : paymentInfo.status) || 'pending',
+                ...((paymentInfo === null || paymentInfo === void 0 ? void 0 : paymentInfo.paymentId) && { paymentId: paymentInfo.paymentId }),
+                ...((paymentInfo === null || paymentInfo === void 0 ? void 0 : paymentInfo.transactionId) && { transactionId: paymentInfo.transactionId }),
+                ...((paymentInfo === null || paymentInfo === void 0 ? void 0 : paymentInfo.paidAt) && { paidAt: paymentInfo.paidAt })
             },
-            status: 'pending'
+            status: status || 'pending'
         };
         console.log('📝 Final booking data:', bookingData);
         const booking = new Booking_1.default(bookingData);
@@ -213,7 +216,8 @@ const getBookingById = async (req, res) => {
             return;
         }
         const { id } = req.params;
-        const booking = await Booking_1.default.findById(id).populate('routeId', 'name startLocation endLocation waypoints vehicleInfo operatorInfo').populate('paymentInfo.paymentId');
+        // Find by bookingId field instead of MongoDB _id
+        const booking = await Booking_1.default.findOne({ bookingId: id }).populate('routeId', 'name startLocation endLocation waypoints vehicleInfo operatorInfo').populate('paymentInfo.paymentId');
         if (!booking) {
             res.status(404).json({ message: 'Booking not found' });
             return;
@@ -244,7 +248,8 @@ const updateBooking = async (req, res) => {
         }
         const { id } = req.params;
         const { passengerInfo, seatInfo } = req.body;
-        const booking = await Booking_1.default.findById(id);
+        // Find by bookingId field instead of MongoDB _id
+        const booking = await Booking_1.default.findOne({ bookingId: id });
         if (!booking) {
             res.status(404).json({ message: 'Booking not found' });
             return;
@@ -294,7 +299,8 @@ const cancelBooking = async (req, res) => {
         }
         const { id } = req.params;
         const { reason } = req.body;
-        const booking = await Booking_1.default.findById(id);
+        // Find by bookingId field instead of MongoDB _id
+        const booking = await Booking_1.default.findOne({ bookingId: id });
         if (!booking) {
             res.status(404).json({ message: 'Booking not found' });
             return;
@@ -340,7 +346,8 @@ const generateQRCode = async (req, res) => {
             return;
         }
         const { id } = req.params;
-        const booking = await Booking_1.default.findById(id);
+        // Find by bookingId field instead of MongoDB _id
+        const booking = await Booking_1.default.findOne({ bookingId: id });
         if (!booking) {
             res.status(404).json({ message: 'Booking not found' });
             return;
@@ -377,7 +384,8 @@ const checkInPassenger = async (req, res) => {
         }
         const { id } = req.params;
         const { location } = req.body;
-        const booking = await Booking_1.default.findById(id);
+        // Find by bookingId field instead of MongoDB _id
+        const booking = await Booking_1.default.findOne({ bookingId: id });
         if (!booking) {
             res.status(404).json({ message: 'Booking not found' });
             return;
