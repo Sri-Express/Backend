@@ -55,7 +55,17 @@ export const createBooking = async (req: Request, res: Response): Promise<void> 
     console.log('🎫 Creating booking for user:', req.user._id);
     console.log('📋 Booking request data:', req.body);
 
-    const { routeId, scheduleId, travelDate, departureTime, passengerInfo, seatInfo, paymentMethod } = req.body;
+    const { 
+      routeId, 
+      scheduleId, 
+      travelDate, 
+      departureTime, 
+      passengerInfo, 
+      seatInfo, 
+      paymentMethod,
+      status,
+      paymentInfo
+    } = req.body;
     
     // ✅ FIXED: Enhanced validation
     if (!routeId || !scheduleId || !travelDate || !departureTime || !passengerInfo || !seatInfo || !paymentMethod) { 
@@ -138,9 +148,12 @@ export const createBooking = async (req: Request, res: Response): Promise<void> 
       },
       paymentInfo: {
         method: paymentMethod,
-        status: 'pending'
+        status: paymentInfo?.status || 'pending',
+        ...(paymentInfo?.paymentId && { paymentId: paymentInfo.paymentId }),
+        ...(paymentInfo?.transactionId && { transactionId: paymentInfo.transactionId }),
+        ...(paymentInfo?.paidAt && { paidAt: paymentInfo.paidAt })
       },
-      status: 'pending'
+      status: status || 'pending'
     };
 
     console.log('📝 Final booking data:', bookingData);
@@ -225,7 +238,8 @@ export const getBookingById = async (req: Request, res: Response): Promise<void>
     if (!req.user) { res.status(401).json({ message: 'Not authorized' }); return; }
 
     const { id } = req.params;
-    const booking = await Booking.findById(id).populate('routeId', 'name startLocation endLocation waypoints vehicleInfo operatorInfo').populate('paymentInfo.paymentId');
+    // Find by bookingId field instead of MongoDB _id
+    const booking = await Booking.findOne({ bookingId: id }).populate('routeId', 'name startLocation endLocation waypoints vehicleInfo operatorInfo').populate('paymentInfo.paymentId');
     if (!booking) { res.status(404).json({ message: 'Booking not found' }); return; }
 
     // Check if user owns this booking
@@ -249,7 +263,8 @@ export const updateBooking = async (req: Request, res: Response): Promise<void> 
     if (!req.user) { res.status(401).json({ message: 'Not authorized' }); return; }
 
     const { id } = req.params; const { passengerInfo, seatInfo } = req.body;
-    const booking = await Booking.findById(id);
+    // Find by bookingId field instead of MongoDB _id
+    const booking = await Booking.findOne({ bookingId: id });
     if (!booking) { res.status(404).json({ message: 'Booking not found' }); return; }
 
     // Check if user owns this booking
@@ -286,7 +301,8 @@ export const cancelBooking = async (req: Request, res: Response): Promise<void> 
     if (!req.user) { res.status(401).json({ message: 'Not authorized' }); return; }
 
     const { id } = req.params; const { reason } = req.body;
-    const booking = await Booking.findById(id);
+    // Find by bookingId field instead of MongoDB _id
+    const booking = await Booking.findOne({ bookingId: id });
     if (!booking) { res.status(404).json({ message: 'Booking not found' }); return; }
 
     // Check if user owns this booking
@@ -326,7 +342,8 @@ export const generateQRCode = async (req: Request, res: Response): Promise<void>
     if (!req.user) { res.status(401).json({ message: 'Not authorized' }); return; }
 
     const { id } = req.params;
-    const booking = await Booking.findById(id);
+    // Find by bookingId field instead of MongoDB _id
+    const booking = await Booking.findOne({ bookingId: id });
     if (!booking) { res.status(404).json({ message: 'Booking not found' }); return; }
 
     // Check if user owns this booking
@@ -353,7 +370,8 @@ export const checkInPassenger = async (req: Request, res: Response): Promise<voi
     if (!req.user) { res.status(401).json({ message: 'Not authorized' }); return; }
 
     const { id } = req.params; const { location } = req.body;
-    const booking = await Booking.findById(id);
+    // Find by bookingId field instead of MongoDB _id
+    const booking = await Booking.findOne({ bookingId: id });
     if (!booking) { res.status(404).json({ message: 'Booking not found' }); return; }
 
     // Check if user owns this booking

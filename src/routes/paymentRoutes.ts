@@ -1,8 +1,9 @@
-// src/routes/paymentRoutes.ts
+// src/routes/paymentRoutes.ts - FIXED VERSION WITH CONFIRM ENDPOINT
 import express from 'express';
 import { protect } from '../middleware/authMiddleware';
 import {
   processPayment,
+  confirmPayment, // 🔥 NEW: Added confirm payment import
   getPaymentById,
   processRefund,
   getPaymentHistory,
@@ -19,6 +20,7 @@ router.get('/methods', getPaymentMethods);
 router.use(protect);
 
 router.post('/', processPayment);
+router.post('/confirm', confirmPayment); // 🔥 NEW: Added confirm payment endpoint
 router.get('/history', getPaymentHistory);
 router.get('/stats', getPaymentStats);
 router.get('/:id', getPaymentById);
