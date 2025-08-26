@@ -8,30 +8,108 @@ exports.sendPasswordResetOTP = void 0;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const sendEmail = async (options) => {
     try {
-        // Create a transporter
+        console.log('Setting up email transport with config:', {
+            host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
+            port: parseInt(process.env.SMTP_PORT || '587'),
+            user: process.env.SMTP_USER ? 'Configured' : 'Missing',
+            from: process.env.EMAIL_FROM || '"ශ්‍රී Express" <noreply@sri-express.com>'
+        });
+        // For development mode, create a test account if SMTP fails
+        if (process.env.NODE_ENV === 'development') {
+            try {
+                // Try to create an ethereal test account first
+                const testAccount = await nodemailer_1.default.createTestAccount();
+                console.log('📧 Created test email account for development');
+                const transporter = nodemailer_1.default.createTransport({
+                    host: 'smtp.ethereal.email',
+                    port: 587,
+                    secure: false,
+                    auth: {
+                        user: testAccount.user,
+                        pass: testAccount.pass,
+                    },
+                });
+                const mailOptions = {
+                    from: process.env.EMAIL_FROM || '"ශ්‍රී Express" <noreply@sri-express.com>',
+                    to: options.email,
+                    subject: options.subject,
+                    html: options.html,
+                };
+                console.log('Sending test email to:', options.email);
+                const info = await transporter.sendMail(mailOptions);
+                console.log('✅ Test email sent successfully:', {
+                    messageId: info.messageId,
+                    to: options.email,
+                    previewURL: nodemailer_1.default.getTestMessageUrl(info)
+                });
+                console.log('🔗 View email at:', nodemailer_1.default.getTestMessageUrl(info));
+                return;
+            }
+            catch (testError) {
+                console.log('⚠️ Test email failed, falling back to mock mode:', testError instanceof Error ? testError.message : 'Unknown error');
+            }
+        }
+        // Original Brevo configuration
         const transporter = nodemailer_1.default.createTransport({
             host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
             port: parseInt(process.env.SMTP_PORT || '587'),
-            secure: parseInt(process.env.SMTP_PORT || '587') === 465, // true for 465 (SSL)
+            secure: false,
             auth: {
                 user: process.env.SMTP_USER || '',
                 pass: process.env.SMTP_PASSWORD || '',
             },
+            tls: {
+                rejectUnauthorized: false
+            },
+            connectionTimeout: 30000,
+            greetingTimeout: 15000,
+            socketTimeout: 30000,
         });
-        // Define email options
         const mailOptions = {
             from: process.env.EMAIL_FROM || '"ශ්‍රී Express" <noreply@sri-express.com>',
             to: options.email,
             subject: options.subject,
             html: options.html,
         };
-        // Send the email
-        const info = await transporter.sendMail(mailOptions);
-        console.log('Email sent successfully:', info.messageId);
+        console.log('Sending email to:', options.email);
+        console.log('Email subject:', options.subject);
+        // Send the email with timeout
+        try {
+            const info = await Promise.race([
+                transporter.sendMail(mailOptions),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Email timeout after 30 seconds')), 30000))
+            ]);
+            console.log('✅ Email sent successfully:', {
+                messageId: info.messageId,
+                to: options.email,
+                accepted: info.accepted,
+                rejected: info.rejected
+            });
+        }
+        catch (sendError) {
+            console.error('❌ Failed to send email:', sendError);
+            // For development, we'll log the error but not throw
+            if (process.env.NODE_ENV === 'development') {
+                console.log('⚠️ Email sending failed in development mode, returning successfully...');
+                console.log('Email content that would have been sent:');
+                console.log('To:', options.email);
+                console.log('Subject:', options.subject);
+                console.log('HTML length:', options.html.length);
+                return; // Don't throw error in development
+            }
+            else {
+                throw sendError;
+            }
+        }
     }
     catch (error) {
-        console.error('Error sending email:', error);
-        throw new Error('Email could not be sent');
+        console.error('❌ Error in sendEmail function:', error);
+        // In development mode, don't throw errors for email issues
+        if (process.env.NODE_ENV === 'development') {
+            console.log('⚠️ Email error suppressed in development mode - returning successfully');
+            return;
+        }
+        throw new Error(`Email could not be sent: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 };
 const sendPasswordResetOTP = async (email, otp, name) => {
