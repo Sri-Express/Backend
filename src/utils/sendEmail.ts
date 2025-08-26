@@ -11,7 +11,7 @@ interface EmailOptions {
 }
 
 // Brevo Transporter Configuration
-const transporter = nodemailer.createTransport({
+const transporter = nodemailer.createTransporter({
   host: 'smtp-relay.brevo.com',
   port: 587,
   auth: {
@@ -65,36 +65,159 @@ export const sendTicketEmail = async (
   email: string,
   passengerName: string,
   bookingId: string,
-  qrCodeDataURL: string,
+  qrCodeURL: string, // Now accepts HTTP URLs (much better for email compatibility)
   bookingDetails: any
 ): Promise<void> => {
+  
+  console.log('Sending ticket email with QR URL:', qrCodeURL);
+
   const htmlContent = `
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Sri Express - Your Ticket</title>
       <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f8f9fa; }
-        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-        .header { background: linear-gradient(135deg, #F59E0B, #EF4444); color: white; padding: 30px 20px; text-align: center; }
-        .header h1 { margin: 0; font-size: 32px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
-        .header p { margin: 10px 0 0 0; opacity: 0.9; font-size: 16px; }
-        .content { padding: 30px; }
-        .greeting { font-size: 18px; color: #333; margin-bottom: 20px; }
-        .qr-section { text-align: center; margin: 30px 0; }
-        .qr-code { border: 3px solid #F59E0B; border-radius: 12px; padding: 15px; display: inline-block; background: white; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2); }
-        .qr-code img { max-width: 200px; display: block; }
-        .qr-instruction { margin-top: 15px; color: #666; font-size: 16px; font-weight: 500; }
-        .details { margin: 30px 0; }
-        .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
-        .detail-item { padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #F59E0B; }
-        .detail-label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
-        .detail-value { font-size: 16px; color: #333; font-weight: 600; }
-        .important { background: #FEF3C7; padding: 20px; border-radius: 8px; margin: 30px 0; border: 1px solid #F59E0B; border-left: 4px solid #F59E0B; }
-        .important h3 { margin: 0 0 15px 0; color: #92400E; font-size: 18px; }
-        .important ul { margin: 10px 0; padding-left: 20px; color: #92400E; line-height: 1.6; }
-        .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; font-size: 14px; border-top: 1px solid #eee; }
+        body { 
+          font-family: Arial, sans-serif; 
+          margin: 0; 
+          padding: 20px; 
+          background: #f8f9fa; 
+          line-height: 1.6;
+        }
+        .container { 
+          max-width: 600px; 
+          margin: 0 auto; 
+          background: white; 
+          border-radius: 12px; 
+          overflow: hidden; 
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+        }
+        .header { 
+          background: linear-gradient(135deg, #F59E0B, #EF4444); 
+          color: white; 
+          padding: 30px 20px; 
+          text-align: center; 
+        }
+        .header h1 { 
+          margin: 0; 
+          font-size: 32px; 
+          text-shadow: 0 2px 4px rgba(0,0,0,0.3); 
+        }
+        .header p { 
+          margin: 10px 0 0 0; 
+          opacity: 0.9; 
+          font-size: 16px; 
+        }
+        .content { 
+          padding: 30px; 
+        }
+        .greeting { 
+          font-size: 18px; 
+          color: #333; 
+          margin-bottom: 20px; 
+        }
+        .qr-section { 
+          text-align: center; 
+          margin: 30px 0; 
+        }
+        .qr-code { 
+          border: 3px solid #F59E0B; 
+          border-radius: 12px; 
+          padding: 15px; 
+          display: inline-block; 
+          background: white; 
+          box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2); 
+        }
+        .qr-code img { 
+          max-width: 250px; 
+          width: 100%; 
+          height: auto; 
+          display: block; 
+        }
+        .qr-instruction { 
+          margin-top: 15px; 
+          color: #666; 
+          font-size: 16px; 
+          font-weight: 500; 
+        }
+        .qr-fallback {
+          display: none;
+          background: #f3f4f6;
+          border: 2px dashed #6b7280;
+          border-radius: 8px;
+          padding: 20px;
+          margin: 20px 0;
+          text-align: center;
+        }
+        .booking-id-large {
+          font-size: 28px;
+          font-weight: bold;
+          color: #F59E0B;
+          letter-spacing: 2px;
+          font-family: monospace;
+          margin: 15px 0;
+        }
+        .details { 
+          margin: 30px 0; 
+        }
+        .detail-grid { 
+          display: grid; 
+          grid-template-columns: 1fr 1fr; 
+          gap: 20px; 
+          margin: 20px 0; 
+        }
+        @media (max-width: 600px) {
+          .detail-grid { 
+            grid-template-columns: 1fr; 
+          }
+        }
+        .detail-item { 
+          padding: 15px; 
+          background: #f8f9fa; 
+          border-radius: 8px; 
+          border-left: 4px solid #F59E0B; 
+        }
+        .detail-label { 
+          font-size: 12px; 
+          color: #666; 
+          text-transform: uppercase; 
+          letter-spacing: 0.5px; 
+          margin-bottom: 5px; 
+        }
+        .detail-value { 
+          font-size: 16px; 
+          color: #333; 
+          font-weight: 600; 
+        }
+        .important { 
+          background: #FEF3C7; 
+          padding: 20px; 
+          border-radius: 8px; 
+          margin: 30px 0; 
+          border: 1px solid #F59E0B; 
+          border-left: 4px solid #F59E0B; 
+        }
+        .important h3 { 
+          margin: 0 0 15px 0; 
+          color: #92400E; 
+          font-size: 18px; 
+        }
+        .important ul { 
+          margin: 10px 0; 
+          padding-left: 20px; 
+          color: #92400E; 
+          line-height: 1.6; 
+        }
+        .footer { 
+          background: #f8f9fa; 
+          padding: 20px; 
+          text-align: center; 
+          color: #666; 
+          font-size: 14px; 
+          border-top: 1px solid #eee; 
+        }
       </style>
     </head>
     <body>
@@ -113,9 +236,20 @@ export const sendTicketEmail = async (
           
           <div class="qr-section">
             <div class="qr-code">
-              <img src="{{qrCodeDataURL}}" alt="Ticket QR Code" />
+              <img src="{{qrCodeURL}}" 
+                   alt="Ticket QR Code" 
+                   style="max-width: 250px; width: 100%; height: auto; display: block;"
+                   onerror="this.style.display='none'; document.getElementById('qr-fallback').style.display='block';" />
             </div>
             <div class="qr-instruction">Show this QR code to the conductor</div>
+            
+            <!-- Fallback if QR image fails to load -->
+            <div id="qr-fallback" class="qr-fallback">
+              <h3 style="color: #374151; margin-top: 0;">QR Code Alternative</h3>
+              <p>If the QR code doesn't display above, show this booking ID:</p>
+              <div class="booking-id-large">{{bookingId}}</div>
+              <p style="color: #6b7280; font-size: 14px;">The conductor can verify your ticket using this booking ID</p>
+            </div>
           </div>
           
           <div class="details">
@@ -151,6 +285,7 @@ export const sendTicketEmail = async (
             <h3>Important Instructions</h3>
             <ul>
               <li>Present this QR code for verification before boarding</li>
+              <li><strong>If QR code doesn't show:</strong> Use Booking ID <strong>{{bookingId}}</strong></li>
               <li>Arrive at the departure point 15 minutes early</li>
               <li>Carry valid photo ID matching the passenger name</li>
               <li>This ticket is non-transferable and valid only for the specified journey</li>
@@ -176,7 +311,7 @@ export const sendTicketEmail = async (
       companyName: 'ශ්‍රී Express',
       passengerName,
       bookingId,
-      qrCodeDataURL,
+      qrCodeURL, // This now contains the HTTP URL from QR service
       routeName: bookingDetails.routeId?.name || 'N/A',
       travelDate: new Date(bookingDetails.travelDate).toLocaleDateString(),
       departureTime: bookingDetails.departureTime,

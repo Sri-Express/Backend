@@ -1,0 +1,2124 @@
+warning: in the working copy of 'dist/controllers/bookingController.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'dist/routes/bookingRoutes.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'dist/utils/sendEmail.js', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/dist/controllers/bookingController.js b/dist/controllers/bookingController.js[m
+[1mindex 6b890d8..1e3f510 100644[m
+[1m--- a/dist/controllers/bookingController.js[m
+[1m+++ b/dist/controllers/bookingController.js[m
+[36m@@ -42,6 +42,7 @@[m [mconst Booking_1 = __importDefault(require("../models/Booking"));[m
+ const Route_1 = __importDefault(require("../models/Route"));[m
+ const Payment_1 = __importDefault(require("../models/Payment"));[m
+ const QRCode = __importStar(require("qrcode"));[m
+[32m+[m[32mconst sendEmail_1 = __importDefault(require("../utils/sendEmail"));[m
+ // Payment method mapping function[m
+ const mapPaymentMethod = (frontendMethod) => {[m
+     const mapping = {[m
+[36m@@ -927,7 +928,7 @@[m [mconst sendTicketByEmail = async (req, res) => {[m
+             return;[m
+         }[m
+         const { id } = req.params;[m
+[31m-        const { email, qrCode } = req.body;[m
+[32m+[m[32m        const { email } = req.body;[m
+         console.log('Email ticket request:', { bookingId: id, email });[m
+         // Find booking[m
+         const booking = await Booking_1.default.findOne({ bookingId: id }).populate('routeId', 'name startLocation endLocation');[m
+[36m@@ -945,6 +946,35 @@[m [mconst sendTicketByEmail = async (req, res) => {[m
+             res.status(400).json({ message: 'Can only email confirmed bookings' });[m
+             return;[m
+         }[m
+[32m+[m[32m        // Generate QR code[m
+[32m+[m[32m        let qrCodeData;[m
+[32m+[m[32m        try {[m
+[32m+[m[32m            const qrText = JSON.stringify({[m
+[32m+[m[32m                booking: booking.bookingId,[m
+[32m+[m[32m                passenger: booking.passengerInfo.name,[m
+[32m+[m[32m                seat: booking.seatInfo.seatNumber,[m
+[32m+[m[32m                date: booking.travelDate.toISOString().split('T')[0],[m
+[32m+[m[32m                time: booking.departureTime,[m
+[32m+[m[32m                verification: `SRI-EXPRESS-${booking.bookingId}`[m
+[32m+[m[32m            });[m
+[32m+[m[32m            qrCodeData = await QRCode.toDataURL(qrText, {[m
+[32m+[m[32m                errorCorrectionLevel: 'M',[m
+[32m+[m[32m                type: 'image/png',[m
+[32m+[m[32m                margin: 1,[m
+[32m+[m[32m                color: {[m
+[32m+[m[32m                    dark: '#000000',[m
+[32m+[m[32m                    light: '#FFFFFF'[m
+[32m+[m[32m                },[m
+[32m+[m[32m                width: 400[m
+[32m+[m[32m            });[m
+[32m+[m[32m            console.log('QR code generated successfully for email');[m
+[32m+[m[32m        }[m
+[32m+[m[32m        catch (qrError) {[m
+[32m+[m[32m            console.error('QR code generation failed for email:', qrError);[m
+[32m+[m[32m            // Fallback to simple QR code[m
+[32m+[m[32m            const fallbackQrText = `SRI-EXPRESS-${booking.bookingId}-${booking.passengerInfo.name}-${booking.seatInfo.seatNumber}`;[m
+[32m+[m[32m            qrCodeData = `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><rect width='200' height='200' fill='white'/><text x='100' y='100' text-anchor='middle' font-size='12' fill='black'>${booking.bookingId}</text></svg>`;[m
+[32m+[m[32m        }[m
+         // Create email HTML template[m
+         const emailHtml = `[m
+       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8f9fa;">[m
+[36m@@ -959,7 +989,7 @@[m [mconst sendTicketByEmail = async (req, res) => {[m
+           <!-- QR Code Section -->[m
+           <div style="text-align: center; margin: 2rem 0;">[m
+             <div style="display: inline-block; padding: 1rem; background: white; border-radius: 12px; border: 3px solid #F59E0B; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);">[m
+[31m-              <img src="${qrCode}" alt="Ticket QR Code" style="max-width: 200px; width: 100%; height: auto; display: block;" />[m
+[32m+[m[32m              <img src="${qrCodeData}" alt="Ticket QR Code" style="max-width: 200px; width: 100%; height: auto; display: block;" />[m
+             </div>[m
+             <p style="margin-top: 1rem; color: #666; font-size: 1.1rem; font-weight: 500;">Show this QR code to the conductor</p>[m
+           </div>[m
+[36m@@ -1020,18 +1050,36 @@[m [mconst sendTicketByEmail = async (req, res) => {[m
+         </div>[m
+       </div>[m
+     `;[m
+[31m-        // Import and use the sendEmail function[m
+[31m-        const sendEmail = require('../../utils/sendEmail').default;[m
+[31m-        await sendEmail({[m
+[31m-            email: email || booking.passengerInfo.email,[m
+[31m-            subject: `ශ්‍රී Express - Your E-Ticket (${booking.bookingId})`,[m
+[31m-            html: emailHtml[m
+[31m-        });[m
+[31m-        console.log('Ticket email sent successfully to:', email || booking.passengerInfo.email);[m
+[31m-        res.json({[m
+[31m-            message: 'Ticket sent successfully via email',[m
+[31m-            sentTo: email || booking.passengerInfo.email[m
+[31m-        });[m
+[32m+[m[32m        // Send email using the imported function[m
+[32m+[m[32m        try {[m
+[32m+[m[32m            await (0, sendEmail_1.default)({[m
+[32m+[m[32m                email: email || booking.passengerInfo.email,[m
+[32m+[m[32m                subject: `ශ්‍රී Express - Your E-Ticket (${booking.bookingId})`,[m
+[32m+[m[32m                html: emailHtml[m
+[32m+[m[32m            });[m
+[32m+[m[32m            console.log('Ticket email sent successfully to:', email || booking.passengerInfo.email);[m
+[32m+[m[32m            res.json({[m
+[32m+[m[32m                message: 'Ticket sent successfully via email',[m
+[32m+[m[32m                sentTo: email || booking.passengerInfo.email,[m
+[32m+[m[32m                qrCodeGenerated: true[m
+[32m+[m[32m            });[m
+[32m+[m[32m        }[m
+[32m+[m[32m        catch (emailError) {[m
+[32m+[m[32m            console.error('Email sending failed, but QR was generated:', emailError);[m
+[32m+[m[32m            // In development mode, return success with a warning[m
+[32m+[m[32m            if (process.env.NODE_ENV === 'development') {[m
+[32m+[m[32m                res.json({[m
+[32m+[m[32m                    message: 'QR code generated successfully (email sending failed in development mode)',[m
+[32m+[m[32m                    sentTo: email || booking.passengerInfo.email,[m
+[32m+[m[32m                    qrCodeGenerated: true,[m
+[32m+[m[32m                    emailWarning: 'Email sending failed - check SMTP configuration',[m
+[32m+[m[32m                    error: emailError instanceof Error ? emailError.message : 'Unknown email error'[m
+[32m+[m[32m                });[m
+[32m+[m[32m            }[m
+[32m+[m[32m            else {[m
+[32m+[m[32m                throw emailError;[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+     }[m
+     catch (error) {[m
+         console.error('Send ticket email error:', error);[m
+[1mdiff --git a/dist/routes/bookingRoutes.js b/dist/routes/bookingRoutes.js[m
+[1mindex 1850a45..104f562 100644[m
+[1m--- a/dist/routes/bookingRoutes.js[m
+[1m+++ b/dist/routes/bookingRoutes.js[m
+[36m@@ -19,5 +19,6 @@[m [mrouter.get('/:id', bookingController_1.getBookingById);[m
+ router.put('/:id', bookingController_1.updateBooking);[m
+ router.put('/:id/cancel', bookingController_1.cancelBooking);[m
+ router.post('/:id/qr', bookingController_1.generateQRCode);[m
+[32m+[m[32mrouter.post('/:id/email-ticket', bookingController_1.sendTicketByEmail);[m
+ router.post('/:id/checkin', bookingController_1.checkInPassenger);[m
+ exports.default = router;[m
+[1mdiff --git a/dist/utils/sendEmail.js b/dist/utils/sendEmail.js[m
+[1mindex 33f4b39..6a5084d 100644[m
+[1m--- a/dist/utils/sendEmail.js[m
+[1m+++ b/dist/utils/sendEmail.js[m
+[36m@@ -8,30 +8,108 @@[m [mexports.sendPasswordResetOTP = void 0;[m
+ const nodemailer_1 = __importDefault(require("nodemailer"));[m
+ const sendEmail = async (options) => {[m
+     try {[m
+[31m-        // Create a transporter[m
+[32m+[m[32m        console.log('Setting up email transport with config:', {[m
+[32m+[m[32m            host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',[m
+[32m+[m[32m            port: parseInt(process.env.SMTP_PORT || '587'),[m
+[32m+[m[32m            user: process.env.SMTP_USER ? 'Configured' : 'Missing',[m
+[32m+[m[32m            from: process.env.EMAIL_FROM || '"ශ්‍රී Express" <noreply@sri-express.com>'[m
+[32m+[m[32m        });[m
+[32m+[m[32m        // For development mode, create a test account if SMTP fails[m
+[32m+[m[32m        if (process.env.NODE_ENV === 'development') {[m
+[32m+[m[32m            try {[m
+[32m+[m[32m                // Try to create an ethereal test account first[m
+[32m+[m[32m                const testAccount = await nodemailer_1.default.createTestAccount();[m
+[32m+[m[32m                console.log('📧 Created test email account for development');[m
+[32m+[m[32m                const transporter = nodemailer_1.default.createTransport({[m
+[32m+[m[32m                    host: 'smtp.ethereal.email',[m
+[32m+[m[32m                    port: 587,[m
+[32m+[m[32m                    secure: false,[m
+[32m+[m[32m                    auth: {[m
+[32m+[m[32m                        user: testAccount.user,[m
+[32m+[m[32m                        pass: testAccount.pass,[m
+[32m+[m[32m                    },[m
+[32m+[m[32m                });[m
+[32m+[m[32m                const mailOptions = {[m
+[32m+[m[32m                    from: process.env.EMAIL_FROM || '"ශ්‍රී Express" <noreply@sri-express.com>',[m
+[32m+[m[32m                    to: options.email,[m
+[32m+[m[32m                    subject: options.subject,[m
+[32m+[m[32m                    html: options.html,[m
+[32m+[m[32m                };[m
+[32m+[m[32m                console.log('Sending test email to:', options.email);[m
+[32m+[m[32m                const info = await transporter.sendMail(mailOptions);[m
+[32m+[m[32m                console.log('✅ Test email sent successfully:', {[m
+[32m+[m[32m                    messageId: info.messageId,[m
+[32m+[m[32m                    to: options.email,[m
+[32m+[m[32m                    previewURL: nodemailer_1.default.getTestMessageUrl(info)[m
+[32m+[m[32m                });[m
+[32m+[m[32m                console.log('🔗 View email at:', nodemailer_1.default.getTestMessageUrl(info));[m
+[32m+[m[32m                return;[m
+[32m+[m[32m            }[m
+[32m+[m[32m            catch (testError) {[m
+[32m+[m[32m                console.log('⚠️ Test email failed, falling back to mock mode:', testError instanceof Error ? testError.message : 'Unknown error');[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m        // Original Brevo configuration[m
+         const transporter = nodemailer_1.default.createTransport({[m
+             host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',[m
+             port: parseInt(process.env.SMTP_PORT || '587'),[m
+[31m-            secure: parseInt(process.env.SMTP_PORT || '587') === 465, // true for 465 (SSL)[m
+[32m+[m[32m            secure: false,[m
+             auth: {[m
+                 user: process.env.SMTP_USER || '',[m
+                 pass: process.env.SMTP_PASSWORD || '',[m
+             },[m
+[32m+[m[32m            tls: {[m
+[32m+[m[32m                rejectUnauthorized: false[m
+[32m+[m[32m            },[m
+[32m+[m[32m            connectionTimeout: 30000,[m
+[32m+[m[32m            greetingTimeout: 15000,[m
+[32m+[m[32m            socketTimeout: 30000,[m
+         });[m
+[31m-        // Define email options[m
+         const mailOptions = {[m
+             from: process.env.EMAIL_FROM || '"ශ්‍රී Express" <noreply@sri-express.com>',[m
+             to: options.email,[m
+             subject: options.subject,[m
+             html: options.html,[m
+         };[m
+[31m-        // Send the email[m
+[31m-        const info = await transporter.sendMail(mailOptions);[m
+[31m-        console.log('Email sent successfully:', info.messageId);[m
+[32m+[m[32m        console.log('Sending email to:', options.email);[m
+[32m+[m[32m        console.log('Email subject:', options.subject);[m
+[32m+[m[32m        // Send the email with timeout[m
+[32m+[m[32m        try {[m
+[32m+[m[32m            const info = await Promise.race([[m
+[32m+[m[32m                transporter.sendMail(mailOptions),[m
+[32m+[m[32m                new Promise((_, reject) => setTimeout(() => reject(new Error('Email timeout after 30 seconds')), 30000))[m
+[32m+[m[32m            ]);[m
+[32m+[m[32m            console.log('✅ Email sent successfully:', {[m
+[32m+[m[32m                messageId: info.messageId,[m
+[32m+[m[32m                to: options.email,[m
+[32m+[m[32m                accepted: info.accepted,[m
+[32m+[m[32m                rejected: info.rejected[m
+[32m+[m[32m            });[m
+[32m+[m[32m        }[m
+[32m+[m[32m        catch (sendError) {[m
+[32m+[m[32m            console.error('❌ Failed to send email:', sendError);[m
+[32m+[m[32m            // For development, we'll log the error but not throw[m
+[32m+[m[32m            if (process.env.NODE_ENV === 'development') {[m
+[32m+[m[32m                console.log('⚠️ Email sending failed in development mode, returning successfully...');[m
+[32m+[m[32m                console.log('Email content that would have been sent:');[m
+[32m+[m[32m                console.log('To:', options.email);[m
+[32m+[m[32m                console.log('Subject:', options.subject);[m
+[32m+[m[32m                console.log('HTML length:', options.html.length);[m
+[32m+[m[32m                return; // Don't throw error in development[m
+[32m+[m[32m            }[m
+[32m+[m[32m            else {[m
+[32m+[m[32m                throw sendError;[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+     }[m
+     catch (error) {[m
+[31m-        console.error('Error sending email:', error);[m
+[31m-        throw new Error('Email could not be sent');[m
+[32m+[m[32m        console.error('❌ Error in sendEmail function:', error);[m
+[32m+[m[32m        // In development mode, don't throw errors for email issues[m
+[32m+[m[32m        if (process.env.NODE_ENV === 'development') {[m
+[32m+[m[32m            console.log('⚠️ Email error suppressed in development mode - returning successfully');[m
+[32m+[m[32m            return;[m
+[32m+[m[32m        }[m
+[32m+[m[32m        throw new Error(`Email could not be sent: ${error instanceof Error ? error.message : 'Unknown error'}`);[m
+     }[m
+ };[m
+ const sendPasswordResetOTP = async (email, otp, name) => {[m
+[1mdiff --git a/package-lock.json b/package-lock.json[m
+[1mindex 3bb610e..b04aaac 100644[m
+[1m--- a/package-lock.json[m
+[1m+++ b/package-lock.json[m
+[36m@@ -14,7 +14,7 @@[m
+         "@types/express": "^5.0.2",[m
+         "@types/jsonwebtoken": "^9.0.9",[m
+         "@types/node": "^22.15.18",[m
+[31m-        "@types/nodemailer": "^6.4.17",[m
+[32m+[m[32m        "@types/nodemailer": "^6.4.19",[m
+         "@types/qrcode": "^1.5.5",[m
+         "@types/socket.io": "^3.0.2",[m
+         "bcrypt": "^6.0.0",[m
+[36m@@ -24,7 +24,7 @@[m
+         "helmet": "^8.1.0",[m
+         "jsonwebtoken": "^9.0.2",[m
+         "mongoose": "^8.15.0",[m
+[31m-        "nodemailer": "^7.0.3",[m
+[32m+[m[32m        "nodemailer": "^7.0.5",[m
+         "qrcode": "^1.5.4",[m
+         "socket.io": "^4.7.2",[m
+         "socket.io-client": "^4.7.2",[m
+[36m@@ -39,6 +39,630 @@[m
+         "npm": "10.x"[m
+       }[m
+     },[m
+[32m+[m[32m    "node_modules/@aws-crypto/sha256-browser": {[m
+[32m+[m[32m      "version": "5.2.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-crypto/sha256-browser/-/sha256-browser-5.2.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-AXfN/lGotSQwu6HNcEsIASo7kWXZ5HYWvfOmSNKDsEqC4OashTp8alTmaz+F7TC2L083SFv5RdB+qU3Vs1kZqw==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-crypto/sha256-js": "^5.2.0",[m
+[32m+[m[32m        "@aws-crypto/supports-web-crypto": "^5.2.0",[m
+[32m+[m[32m        "@aws-crypto/util": "^5.2.0",[m
+[32m+[m[32m        "@aws-sdk/types": "^3.222.0",[m
+[32m+[m[32m        "@aws-sdk/util-locate-window": "^3.0.0",[m
+[32m+[m[32m        "@smithy/util-utf8": "^2.0.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-crypto/sha256-browser/node_modules/@smithy/is-array-buffer": {[m
+[32m+[m[32m      "version": "2.2.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/is-array-buffer/-/is-array-buffer-2.2.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-GGP3O9QFD24uGeAXYUjwSTXARoqpZykHadOmA8G5vfJPK0/DC67qa//0qvqrJzL1xc8WQWX7/yc7fwudjPHPhA==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=14.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-crypto/sha256-browser/node_modules/@smithy/util-buffer-from": {[m
+[32m+[m[32m      "version": "2.2.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-buffer-from/-/util-buffer-from-2.2.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-IJdWBbTcMQ6DA0gdNhh/BwrLkDR+ADW5Kr1aZmd4k3DIF6ezMV4R2NIAmT08wQJ3yUK82thHWmC/TnK/wpMMIA==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/is-array-buffer": "^2.2.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=14.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-crypto/sha256-browser/node_modules/@smithy/util-utf8": {[m
+[32m+[m[32m      "version": "2.3.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-utf8/-/util-utf8-2.3.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-R8Rdn8Hy72KKcebgLiv8jQcQkXoLMOGGv5uI1/k0l+snqkOzQ1R0ChUBCxWMlBsFMekWjq0wRudIweFs7sKT5A==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/util-buffer-from": "^2.2.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=14.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-crypto/sha256-js": {[m
+[32m+[m[32m      "version": "5.2.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-crypto/sha256-js/-/sha256-js-5.2.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-FFQQyu7edu4ufvIZ+OadFpHHOt+eSTBaYaki44c+akjg7qZg9oOQeLlk77F6tSYqjDAFClrHJk9tMf0HdVyOvA==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-crypto/util": "^5.2.0",[m
+[32m+[m[32m        "@aws-sdk/types": "^3.222.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=16.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-crypto/supports-web-crypto": {[m
+[32m+[m[32m      "version": "5.2.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-crypto/supports-web-crypto/-/supports-web-crypto-5.2.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-iAvUotm021kM33eCdNfwIN//F77/IADDSs58i+MDaOqFrVjZo9bAal0NK7HurRuWLLpF1iLX7gbWrjHjeo+YFg==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-crypto/util": {[m
+[32m+[m[32m      "version": "5.2.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-crypto/util/-/util-5.2.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-4RkU9EsI6ZpBve5fseQlGNUWKMa1RLPQ1dnjnQoe07ldfIzcsGb5hC5W0Dm7u423KWzawlrpbjXBrXCEv9zazQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/types": "^3.222.0",[m
+[32m+[m[32m        "@smithy/util-utf8": "^2.0.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-crypto/util/node_modules/@smithy/is-array-buffer": {[m
+[32m+[m[32m      "version": "2.2.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/is-array-buffer/-/is-array-buffer-2.2.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-GGP3O9QFD24uGeAXYUjwSTXARoqpZykHadOmA8G5vfJPK0/DC67qa//0qvqrJzL1xc8WQWX7/yc7fwudjPHPhA==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=14.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-crypto/util/node_modules/@smithy/util-buffer-from": {[m
+[32m+[m[32m      "version": "2.2.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-buffer-from/-/util-buffer-from-2.2.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-IJdWBbTcMQ6DA0gdNhh/BwrLkDR+ADW5Kr1aZmd4k3DIF6ezMV4R2NIAmT08wQJ3yUK82thHWmC/TnK/wpMMIA==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/is-array-buffer": "^2.2.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=14.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-crypto/util/node_modules/@smithy/util-utf8": {[m
+[32m+[m[32m      "version": "2.3.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-utf8/-/util-utf8-2.3.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-R8Rdn8Hy72KKcebgLiv8jQcQkXoLMOGGv5uI1/k0l+snqkOzQ1R0ChUBCxWMlBsFMekWjq0wRudIweFs7sKT5A==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/util-buffer-from": "^2.2.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=14.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/client-ses": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/client-ses/-/client-ses-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-m133jrCWPtMLSRYadK5gc6B4HqSP9EKZjCyq+sTlerN0vUBI/Uf5eA+6ZG3/04lIA7nOje+wCB8dTSZmiId55w==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-crypto/sha256-browser": "5.2.0",[m
+[32m+[m[32m        "@aws-crypto/sha256-js": "5.2.0",[m
+[32m+[m[32m        "@aws-sdk/core": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/credential-provider-node": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/middleware-host-header": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/middleware-logger": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/middleware-recursion-detection": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/middleware-user-agent": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/region-config-resolver": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@aws-sdk/util-endpoints": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/util-user-agent-browser": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/util-user-agent-node": "3.873.0",[m
+[32m+[m[32m        "@smithy/config-resolver": "^4.1.5",[m
+[32m+[m[32m        "@smithy/core": "^3.8.0",[m
+[32m+[m[32m        "@smithy/fetch-http-handler": "^5.1.1",[m
+[32m+[m[32m        "@smithy/hash-node": "^4.0.5",[m
+[32m+[m[32m        "@smithy/invalid-dependency": "^4.0.5",[m
+[32m+[m[32m        "@smithy/middleware-content-length": "^4.0.5",[m
+[32m+[m[32m        "@smithy/middleware-endpoint": "^4.1.18",[m
+[32m+[m[32m        "@smithy/middleware-retry": "^4.1.19",[m
+[32m+[m[32m        "@smithy/middleware-serde": "^4.0.9",[m
+[32m+[m[32m        "@smithy/middleware-stack": "^4.0.5",[m
+[32m+[m[32m        "@smithy/node-config-provider": "^4.1.4",[m
+[32m+[m[32m        "@smithy/node-http-handler": "^4.1.1",[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/smithy-client": "^4.4.10",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/url-parser": "^4.0.5",[m
+[32m+[m[32m        "@smithy/util-base64": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-body-length-browser": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-body-length-node": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-defaults-mode-browser": "^4.0.26",[m
+[32m+[m[32m        "@smithy/util-defaults-mode-node": "^4.0.26",[m
+[32m+[m[32m        "@smithy/util-endpoints": "^3.0.7",[m
+[32m+[m[32m        "@smithy/util-middleware": "^4.0.5",[m
+[32m+[m[32m        "@smithy/util-retry": "^4.0.7",[m
+[32m+[m[32m        "@smithy/util-utf8": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-waiter": "^4.0.7",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/client-sso": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/client-sso/-/client-sso-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-EmcrOgFODWe7IsLKFTeSXM9TlQ80/BO1MBISlr7w2ydnOaUYIiPGRRJnDpeIgMaNqT4Rr2cRN2RiMrbFO7gDdA==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-crypto/sha256-browser": "5.2.0",[m
+[32m+[m[32m        "@aws-crypto/sha256-js": "5.2.0",[m
+[32m+[m[32m        "@aws-sdk/core": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/middleware-host-header": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/middleware-logger": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/middleware-recursion-detection": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/middleware-user-agent": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/region-config-resolver": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@aws-sdk/util-endpoints": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/util-user-agent-browser": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/util-user-agent-node": "3.873.0",[m
+[32m+[m[32m        "@smithy/config-resolver": "^4.1.5",[m
+[32m+[m[32m        "@smithy/core": "^3.8.0",[m
+[32m+[m[32m        "@smithy/fetch-http-handler": "^5.1.1",[m
+[32m+[m[32m        "@smithy/hash-node": "^4.0.5",[m
+[32m+[m[32m        "@smithy/invalid-dependency": "^4.0.5",[m
+[32m+[m[32m        "@smithy/middleware-content-length": "^4.0.5",[m
+[32m+[m[32m        "@smithy/middleware-endpoint": "^4.1.18",[m
+[32m+[m[32m        "@smithy/middleware-retry": "^4.1.19",[m
+[32m+[m[32m        "@smithy/middleware-serde": "^4.0.9",[m
+[32m+[m[32m        "@smithy/middleware-stack": "^4.0.5",[m
+[32m+[m[32m        "@smithy/node-config-provider": "^4.1.4",[m
+[32m+[m[32m        "@smithy/node-http-handler": "^4.1.1",[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/smithy-client": "^4.4.10",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/url-parser": "^4.0.5",[m
+[32m+[m[32m        "@smithy/util-base64": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-body-length-browser": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-body-length-node": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-defaults-mode-browser": "^4.0.26",[m
+[32m+[m[32m        "@smithy/util-defaults-mode-node": "^4.0.26",[m
+[32m+[m[32m        "@smithy/util-endpoints": "^3.0.7",[m
+[32m+[m[32m        "@smithy/util-middleware": "^4.0.5",[m
+[32m+[m[32m        "@smithy/util-retry": "^4.0.7",[m
+[32m+[m[32m        "@smithy/util-utf8": "^4.0.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/core": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/core/-/core-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-WrROjp8X1VvmnZ4TBzwM7RF+EB3wRaY9kQJLXw+Aes0/3zRjUXvGIlseobGJMqMEGnM0YekD2F87UaVfot1xeQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@aws-sdk/xml-builder": "3.873.0",[m
+[32m+[m[32m        "@smithy/core": "^3.8.0",[m
+[32m+[m[32m        "@smithy/node-config-provider": "^4.1.4",[m
+[32m+[m[32m        "@smithy/property-provider": "^4.0.5",[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/signature-v4": "^5.1.3",[m
+[32m+[m[32m        "@smithy/smithy-client": "^4.4.10",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/util-base64": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-body-length-browser": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-middleware": "^4.0.5",[m
+[32m+[m[32m        "@smithy/util-utf8": "^4.0.0",[m
+[32m+[m[32m        "fast-xml-parser": "5.2.5",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/credential-provider-env": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/credential-provider-env/-/credential-provider-env-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-FWj1yUs45VjCADv80JlGshAttUHBL2xtTAbJcAxkkJZzLRKVkdyrepFWhv/95MvDyzfbT6PgJiWMdW65l/8ooA==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/core": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@smithy/property-provider": "^4.0.5",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/credential-provider-http": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/credential-provider-http/-/credential-provider-http-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-0sIokBlXIsndjZFUfr3Xui8W6kPC4DAeBGAXxGi9qbFZ9PWJjn1vt2COLikKH3q2snchk+AsznREZG8NW6ezSg==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/core": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@smithy/fetch-http-handler": "^5.1.1",[m
+[32m+[m[32m        "@smithy/node-http-handler": "^4.1.1",[m
+[32m+[m[32m        "@smithy/property-provider": "^4.0.5",[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/smithy-client": "^4.4.10",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/util-stream": "^4.2.4",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/credential-provider-ini": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/credential-provider-ini/-/credential-provider-ini-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-bQdGqh47Sk0+2S3C+N46aNQsZFzcHs7ndxYLARH/avYXf02Nl68p194eYFaAHJSQ1re5IbExU1+pbums7FJ9fA==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/core": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/credential-provider-env": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/credential-provider-http": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/credential-provider-process": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/credential-provider-sso": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/credential-provider-web-identity": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/nested-clients": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@smithy/credential-provider-imds": "^4.0.7",[m
+[32m+[m[32m        "@smithy/property-provider": "^4.0.5",[m
+[32m+[m[32m        "@smithy/shared-ini-file-loader": "^4.0.5",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/credential-provider-node": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/credential-provider-node/-/credential-provider-node-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-+v/xBEB02k2ExnSDL8+1gD6UizY4Q/HaIJkNSkitFynRiiTQpVOSkCkA0iWxzksMeN8k1IHTE5gzeWpkEjNwbA==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/credential-provider-env": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/credential-provider-http": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/credential-provider-ini": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/credential-provider-process": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/credential-provider-sso": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/credential-provider-web-identity": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@smithy/credential-provider-imds": "^4.0.7",[m
+[32m+[m[32m        "@smithy/property-provider": "^4.0.5",[m
+[32m+[m[32m        "@smithy/shared-ini-file-loader": "^4.0.5",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/credential-provider-process": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/credential-provider-process/-/credential-provider-process-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-ycFv9WN+UJF7bK/ElBq1ugWA4NMbYS//1K55bPQZb2XUpAM2TWFlEjG7DIyOhLNTdl6+CbHlCdhlKQuDGgmm0A==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/core": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@smithy/property-provider": "^4.0.5",[m
+[32m+[m[32m        "@smithy/shared-ini-file-loader": "^4.0.5",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/credential-provider-sso": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/credential-provider-sso/-/credential-provider-sso-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-SudkAOZmjEEYgUrqlUUjvrtbWJeI54/0Xo87KRxm4kfBtMqSx0TxbplNUAk8Gkg4XQNY0o7jpG8tK7r2Wc2+uw==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/client-sso": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/core": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/token-providers": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@smithy/property-provider": "^4.0.5",[m
+[32m+[m[32m        "@smithy/shared-ini-file-loader": "^4.0.5",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/credential-provider-web-identity": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/credential-provider-web-identity/-/credential-provider-web-identity-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-Gw2H21+VkA6AgwKkBtTtlGZ45qgyRZPSKWs0kUwXVlmGOiPz61t/lBX0vG6I06ZIz2wqeTJ5OA1pWZLqw1j0JQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/core": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/nested-clients": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@smithy/property-provider": "^4.0.5",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/middleware-host-header": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/middleware-host-header/-/middleware-host-header-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-KZ/W1uruWtMOs7D5j3KquOxzCnV79KQW9MjJFZM/M0l6KI8J6V3718MXxFHsTjUE4fpdV6SeCNLV1lwGygsjJA==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/middleware-logger": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/middleware-logger/-/middleware-logger-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-QhNZ8X7pW68kFez9QxUSN65Um0Feo18ZmHxszQZNUhKDsXew/EG9NPQE/HgYcekcon35zHxC4xs+FeNuPurP2g==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/middleware-recursion-detection": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/middleware-recursion-detection/-/middleware-recursion-detection-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-OtgY8EXOzRdEWR//WfPkA/fXl0+WwE8hq0y9iw2caNyKPtca85dzrrZWnPqyBK/cpImosrpR1iKMYr41XshsCg==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/middleware-user-agent": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/middleware-user-agent/-/middleware-user-agent-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-gHqAMYpWkPhZLwqB3Yj83JKdL2Vsb64sryo8LN2UdpElpS+0fT4yjqSxKTfp7gkhN6TCIxF24HQgbPk5FMYJWw==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/core": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@aws-sdk/util-endpoints": "3.873.0",[m
+[32m+[m[32m        "@smithy/core": "^3.8.0",[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/nested-clients": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/nested-clients/-/nested-clients-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-yg8JkRHuH/xO65rtmLOWcd9XQhxX1kAonp2CliXT44eA/23OBds6XoheY44eZeHfCTgutDLTYitvy3k9fQY6ZA==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-crypto/sha256-browser": "5.2.0",[m
+[32m+[m[32m        "@aws-crypto/sha256-js": "5.2.0",[m
+[32m+[m[32m        "@aws-sdk/core": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/middleware-host-header": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/middleware-logger": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/middleware-recursion-detection": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/middleware-user-agent": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/region-config-resolver": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@aws-sdk/util-endpoints": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/util-user-agent-browser": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/util-user-agent-node": "3.873.0",[m
+[32m+[m[32m        "@smithy/config-resolver": "^4.1.5",[m
+[32m+[m[32m        "@smithy/core": "^3.8.0",[m
+[32m+[m[32m        "@smithy/fetch-http-handler": "^5.1.1",[m
+[32m+[m[32m        "@smithy/hash-node": "^4.0.5",[m
+[32m+[m[32m        "@smithy/invalid-dependency": "^4.0.5",[m
+[32m+[m[32m        "@smithy/middleware-content-length": "^4.0.5",[m
+[32m+[m[32m        "@smithy/middleware-endpoint": "^4.1.18",[m
+[32m+[m[32m        "@smithy/middleware-retry": "^4.1.19",[m
+[32m+[m[32m        "@smithy/middleware-serde": "^4.0.9",[m
+[32m+[m[32m        "@smithy/middleware-stack": "^4.0.5",[m
+[32m+[m[32m        "@smithy/node-config-provider": "^4.1.4",[m
+[32m+[m[32m        "@smithy/node-http-handler": "^4.1.1",[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/smithy-client": "^4.4.10",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/url-parser": "^4.0.5",[m
+[32m+[m[32m        "@smithy/util-base64": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-body-length-browser": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-body-length-node": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-defaults-mode-browser": "^4.0.26",[m
+[32m+[m[32m        "@smithy/util-defaults-mode-node": "^4.0.26",[m
+[32m+[m[32m        "@smithy/util-endpoints": "^3.0.7",[m
+[32m+[m[32m        "@smithy/util-middleware": "^4.0.5",[m
+[32m+[m[32m        "@smithy/util-retry": "^4.0.7",[m
+[32m+[m[32m        "@smithy/util-utf8": "^4.0.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/region-config-resolver": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/region-config-resolver/-/region-config-resolver-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-q9sPoef+BBG6PJnc4x60vK/bfVwvRWsPgcoQyIra057S/QGjq5VkjvNk6H8xedf6vnKlXNBwq9BaANBXnldUJg==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@smithy/node-config-provider": "^4.1.4",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/util-config-provider": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-middleware": "^4.0.5",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/token-providers": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/token-providers/-/token-providers-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-BWOCeFeV/Ba8fVhtwUw/0Hz4wMm9fjXnMb4Z2a5he/jFlz5mt1/rr6IQ4MyKgzOaz24YrvqsJW2a0VUKOaYDvg==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/core": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/nested-clients": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@smithy/property-provider": "^4.0.5",[m
+[32m+[m[32m        "@smithy/shared-ini-file-loader": "^4.0.5",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/types": {[m
+[32m+[m[32m      "version": "3.862.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/types/-/types-3.862.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-Bei+RL0cDxxV+lW2UezLbCYYNeJm6Nzee0TpW0FfyTRBhH9C1XQh4+x+IClriXvgBnRquTMMYsmJfvx8iyLKrg==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/util-endpoints": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/util-endpoints/-/util-endpoints-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-YByHrhjxYdjKRf/RQygRK1uh0As1FIi9+jXTcIEX/rBgN8mUByczr2u4QXBzw7ZdbdcOBMOkPnLRjNOWW1MkFg==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/url-parser": "^4.0.5",[m
+[32m+[m[32m        "@smithy/util-endpoints": "^3.0.7",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/util-locate-window": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/util-locate-window/-/util-locate-window-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-xcVhZF6svjM5Rj89T1WzkjQmrTF6dpR2UvIHPMTnSZoNe6CixejPZ6f0JJ2kAhO8H+dUHwNBlsUgOTIKiK/Syg==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/util-user-agent-browser": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/util-user-agent-browser/-/util-user-agent-browser-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-AcRdbK6o19yehEcywI43blIBhOCSo6UgyWcuOJX5CFF8k39xm1ILCjQlRRjchLAxWrm0lU0Q7XV90RiMMFMZtA==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "bowser": "^2.11.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/util-user-agent-node": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/util-user-agent-node/-/util-user-agent-node-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-9MivTP+q9Sis71UxuBaIY3h5jxH0vN3/ZWGxO8ADL19S2OIfknrYSAfzE5fpoKROVBu0bS4VifHOFq4PY1zsxw==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/middleware-user-agent": "3.873.0",[m
+[32m+[m[32m        "@aws-sdk/types": "3.862.0",[m
+[32m+[m[32m        "@smithy/node-config-provider": "^4.1.4",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "peerDependencies": {[m
+[32m+[m[32m        "aws-crt": ">=1.0.0"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "peerDependenciesMeta": {[m
+[32m+[m[32m        "aws-crt": {[m
+[32m+[m[32m          "optional": true[m
+[32m+[m[32m        }[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@aws-sdk/xml-builder": {[m
+[32m+[m[32m      "version": "3.873.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@aws-sdk/xml-builder/-/xml-builder-3.873.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-kLO7k7cGJ6KaHiExSJWojZurF7SnGMDHXRuQunFnEoD0n1yB6Lqy/S/zHiQ7oJnBhPr9q0TW9qFkrsZb1Uc54w==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+     "node_modules/@cspotcode/source-map-support": {[m
+       "version": "0.8.1",[m
+       "resolved": "https://registry.npmjs.org/@cspotcode/source-map-support/-/source-map-support-0.8.1.tgz",[m
+[36m@@ -46,47 +670,631 @@[m
+       "dev": true,[m
+       "license": "MIT",[m
+       "dependencies": {[m
+[31m-        "@jridgewell/trace-mapping": "0.3.9"[m
+[32m+[m[32m        "@jridgewell/trace-mapping": "0.3.9"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=12"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@jridgewell/resolve-uri": {[m
+[32m+[m[32m      "version": "3.1.2",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@jridgewell/resolve-uri/-/resolve-uri-3.1.2.tgz",[m
+[32m+[m[32m      "integrity": "sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==",[m
+[32m+[m[32m      "dev": true,[m
+[32m+[m[32m      "license": "MIT",[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=6.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@jridgewell/sourcemap-codec": {[m
+[32m+[m[32m      "version": "1.5.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.5.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-gv3ZRaISU3fjPAgNsriBRqGWQL6quFx04YMPW/zD8XMLsU32mhCCbfbO6KZFLjvYpCZ8zyDEgqsgf+PwPaM7GQ==",[m
+[32m+[m[32m      "dev": true,[m
+[32m+[m[32m      "license": "MIT"[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@jridgewell/trace-mapping": {[m
+[32m+[m[32m      "version": "0.3.9",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@jridgewell/trace-mapping/-/trace-mapping-0.3.9.tgz",[m
+[32m+[m[32m      "integrity": "sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==",[m
+[32m+[m[32m      "dev": true,[m
+[32m+[m[32m      "license": "MIT",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@jridgewell/resolve-uri": "^3.0.3",[m
+[32m+[m[32m        "@jridgewell/sourcemap-codec": "^1.4.10"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@mongodb-js/saslprep": {[m
+[32m+[m[32m      "version": "1.2.2",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@mongodb-js/saslprep/-/saslprep-1.2.2.tgz",[m
+[32m+[m[32m      "integrity": "sha512-EB0O3SCSNRUFk66iRCpI+cXzIjdswfCs7F6nOC3RAGJ7xr5YhaicvsRwJ9eyzYvYRlCSDUO/c7g4yNulxKC1WA==",[m
+[32m+[m[32m      "license": "MIT",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "sparse-bitfield": "^3.0.3"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/abort-controller": {[m
+[32m+[m[32m      "version": "4.0.5",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/abort-controller/-/abort-controller-4.0.5.tgz",[m
+[32m+[m[32m      "integrity": "sha512-jcrqdTQurIrBbUm4W2YdLVMQDoL0sA9DTxYd2s+R/y+2U9NLOP7Xf/YqfSg1FZhlZIYEnvk2mwbyvIfdLEPo8g==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/config-resolver": {[m
+[32m+[m[32m      "version": "4.1.5",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/config-resolver/-/config-resolver-4.1.5.tgz",[m
+[32m+[m[32m      "integrity": "sha512-viuHMxBAqydkB0AfWwHIdwf/PRH2z5KHGUzqyRtS/Wv+n3IHI993Sk76VCA7dD/+GzgGOmlJDITfPcJC1nIVIw==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/node-config-provider": "^4.1.4",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/util-config-provider": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-middleware": "^4.0.5",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/core": {[m
+[32m+[m[32m      "version": "3.8.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/core/-/core-3.8.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-EYqsIYJmkR1VhVE9pccnk353xhs+lB6btdutJEtsp7R055haMJp2yE16eSxw8fv+G0WUY6vqxyYOP8kOqawxYQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/middleware-serde": "^4.0.9",[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/util-base64": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-body-length-browser": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-middleware": "^4.0.5",[m
+[32m+[m[32m        "@smithy/util-stream": "^4.2.4",[m
+[32m+[m[32m        "@smithy/util-utf8": "^4.0.0",[m
+[32m+[m[32m        "@types/uuid": "^9.0.1",[m
+[32m+[m[32m        "tslib": "^2.6.2",[m
+[32m+[m[32m        "uuid": "^9.0.1"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/credential-provider-imds": {[m
+[32m+[m[32m      "version": "4.0.7",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/credential-provider-imds/-/credential-provider-imds-4.0.7.tgz",[m
+[32m+[m[32m      "integrity": "sha512-dDzrMXA8d8riFNiPvytxn0mNwR4B3h8lgrQ5UjAGu6T9z/kRg/Xncf4tEQHE/+t25sY8IH3CowcmWi+1U5B1Gw==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/node-config-provider": "^4.1.4",[m
+[32m+[m[32m        "@smithy/property-provider": "^4.0.5",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/url-parser": "^4.0.5",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/fetch-http-handler": {[m
+[32m+[m[32m      "version": "5.1.1",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/fetch-http-handler/-/fetch-http-handler-5.1.1.tgz",[m
+[32m+[m[32m      "integrity": "sha512-61WjM0PWmZJR+SnmzaKI7t7G0UkkNFboDpzIdzSoy7TByUzlxo18Qlh9s71qug4AY4hlH/CwXdubMtkcNEb/sQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/querystring-builder": "^4.0.5",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/util-base64": "^4.0.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/hash-node": {[m
+[32m+[m[32m      "version": "4.0.5",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/hash-node/-/hash-node-4.0.5.tgz",[m
+[32m+[m[32m      "integrity": "sha512-cv1HHkKhpyRb6ahD8Vcfb2Hgz67vNIXEp2vnhzfxLFGRukLCNEA5QdsorbUEzXma1Rco0u3rx5VTqbM06GcZqQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/util-buffer-from": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-utf8": "^4.0.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/invalid-dependency": {[m
+[32m+[m[32m      "version": "4.0.5",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/invalid-dependency/-/invalid-dependency-4.0.5.tgz",[m
+[32m+[m[32m      "integrity": "sha512-IVnb78Qtf7EJpoEVo7qJ8BEXQwgC4n3igeJNNKEj/MLYtapnx8A67Zt/J3RXAj2xSO1910zk0LdFiygSemuLow==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/is-array-buffer": {[m
+[32m+[m[32m      "version": "4.0.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/is-array-buffer/-/is-array-buffer-4.0.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-saYhF8ZZNoJDTvJBEWgeBccCg+yvp1CX+ed12yORU3NilJScfc6gfch2oVb4QgxZrGUx3/ZJlb+c/dJbyupxlw==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/middleware-content-length": {[m
+[32m+[m[32m      "version": "4.0.5",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/middleware-content-length/-/middleware-content-length-4.0.5.tgz",[m
+[32m+[m[32m      "integrity": "sha512-l1jlNZoYzoCC7p0zCtBDE5OBXZ95yMKlRlftooE5jPWQn4YBPLgsp+oeHp7iMHaTGoUdFqmHOPa8c9G3gBsRpQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/middleware-endpoint": {[m
+[32m+[m[32m      "version": "4.1.18",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/middleware-endpoint/-/middleware-endpoint-4.1.18.tgz",[m
+[32m+[m[32m      "integrity": "sha512-ZhvqcVRPZxnZlokcPaTwb+r+h4yOIOCJmx0v2d1bpVlmP465g3qpVSf7wxcq5zZdu4jb0H4yIMxuPwDJSQc3MQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/core": "^3.8.0",[m
+[32m+[m[32m        "@smithy/middleware-serde": "^4.0.9",[m
+[32m+[m[32m        "@smithy/node-config-provider": "^4.1.4",[m
+[32m+[m[32m        "@smithy/shared-ini-file-loader": "^4.0.5",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/url-parser": "^4.0.5",[m
+[32m+[m[32m        "@smithy/util-middleware": "^4.0.5",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/middleware-retry": {[m
+[32m+[m[32m      "version": "4.1.19",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/middleware-retry/-/middleware-retry-4.1.19.tgz",[m
+[32m+[m[32m      "integrity": "sha512-X58zx/NVECjeuUB6A8HBu4bhx72EoUz+T5jTMIyeNKx2lf+Gs9TmWPNNkH+5QF0COjpInP/xSpJGJ7xEnAklQQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/node-config-provider": "^4.1.4",[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/service-error-classification": "^4.0.7",[m
+[32m+[m[32m        "@smithy/smithy-client": "^4.4.10",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/util-middleware": "^4.0.5",[m
+[32m+[m[32m        "@smithy/util-retry": "^4.0.7",[m
+[32m+[m[32m        "@types/uuid": "^9.0.1",[m
+[32m+[m[32m        "tslib": "^2.6.2",[m
+[32m+[m[32m        "uuid": "^9.0.1"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/middleware-serde": {[m
+[32m+[m[32m      "version": "4.0.9",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/middleware-serde/-/middleware-serde-4.0.9.tgz",[m
+[32m+[m[32m      "integrity": "sha512-uAFFR4dpeoJPGz8x9mhxp+RPjo5wW0QEEIPPPbLXiRRWeCATf/Km3gKIVR5vaP8bN1kgsPhcEeh+IZvUlBv6Xg==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/middleware-stack": {[m
+[32m+[m[32m      "version": "4.0.5",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/middleware-stack/-/middleware-stack-4.0.5.tgz",[m
+[32m+[m[32m      "integrity": "sha512-/yoHDXZPh3ocRVyeWQFvC44u8seu3eYzZRveCMfgMOBcNKnAmOvjbL9+Cp5XKSIi9iYA9PECUuW2teDAk8T+OQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+       },[m
+       "engines": {[m
+[31m-        "node": ">=12"[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+       }[m
+     },[m
+[31m-    "node_modules/@jridgewell/resolve-uri": {[m
+[31m-      "version": "3.1.2",[m
+[31m-      "resolved": "https://registry.npmjs.org/@jridgewell/resolve-uri/-/resolve-uri-3.1.2.tgz",[m
+[31m-      "integrity": "sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==",[m
+[31m-      "dev": true,[m
+[31m-      "license": "MIT",[m
+[32m+[m[32m    "node_modules/@smithy/node-config-provider": {[m
+[32m+[m[32m      "version": "4.1.4",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/node-config-provider/-/node-config-provider-4.1.4.tgz",[m
+[32m+[m[32m      "integrity": "sha512-+UDQV/k42jLEPPHSn39l0Bmc4sB1xtdI9Gd47fzo/0PbXzJ7ylgaOByVjF5EeQIumkepnrJyfx86dPa9p47Y+w==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/property-provider": "^4.0.5",[m
+[32m+[m[32m        "@smithy/shared-ini-file-loader": "^4.0.5",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+       "engines": {[m
+[31m-        "node": ">=6.0.0"[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+       }[m
+     },[m
+[31m-    "node_modules/@jridgewell/sourcemap-codec": {[m
+[31m-      "version": "1.5.0",[m
+[31m-      "resolved": "https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.5.0.tgz",[m
+[31m-      "integrity": "sha512-gv3ZRaISU3fjPAgNsriBRqGWQL6quFx04YMPW/zD8XMLsU32mhCCbfbO6KZFLjvYpCZ8zyDEgqsgf+PwPaM7GQ==",[m
+[31m-      "dev": true,[m
+[31m-      "license": "MIT"[m
+[32m+[m[32m    "node_modules/@smithy/node-http-handler": {[m
+[32m+[m[32m      "version": "4.1.1",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/node-http-handler/-/node-http-handler-4.1.1.tgz",[m
+[32m+[m[32m      "integrity": "sha512-RHnlHqFpoVdjSPPiYy/t40Zovf3BBHc2oemgD7VsVTFFZrU5erFFe0n52OANZZ/5sbshgD93sOh5r6I35Xmpaw==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/abort-controller": "^4.0.5",[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/querystring-builder": "^4.0.5",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+     },[m
+[31m-    "node_modules/@jridgewell/trace-mapping": {[m
+[31m-      "version": "0.3.9",[m
+[31m-      "resolved": "https://registry.npmjs.org/@jridgewell/trace-mapping/-/trace-mapping-0.3.9.tgz",[m
+[31m-      "integrity": "sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==",[m
+[31m-      "dev": true,[m
+[31m-      "license": "MIT",[m
+[32m+[m[32m    "node_modules/@smithy/property-provider": {[m
+[32m+[m[32m      "version": "4.0.5",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/property-provider/-/property-provider-4.0.5.tgz",[m
+[32m+[m[32m      "integrity": "sha512-R/bswf59T/n9ZgfgUICAZoWYKBHcsVDurAGX88zsiUtOTA/xUAPyiT+qkNCPwFn43pZqN84M4MiUsbSGQmgFIQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+       "dependencies": {[m
+[31m-        "@jridgewell/resolve-uri": "^3.0.3",[m
+[31m-        "@jridgewell/sourcemap-codec": "^1.4.10"[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+       }[m
+     },[m
+[31m-    "node_modules/@mongodb-js/saslprep": {[m
+[31m-      "version": "1.2.2",[m
+[31m-      "resolved": "https://registry.npmjs.org/@mongodb-js/saslprep/-/saslprep-1.2.2.tgz",[m
+[31m-      "integrity": "sha512-EB0O3SCSNRUFk66iRCpI+cXzIjdswfCs7F6nOC3RAGJ7xr5YhaicvsRwJ9eyzYvYRlCSDUO/c7g4yNulxKC1WA==",[m
+[31m-      "license": "MIT",[m
+[32m+[m[32m    "node_modules/@smithy/protocol-http": {[m
+[32m+[m[32m      "version": "5.1.3",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/protocol-http/-/protocol-http-5.1.3.tgz",[m
+[32m+[m[32m      "integrity": "sha512-fCJd2ZR7D22XhDY0l+92pUag/7je2BztPRQ01gU5bMChcyI0rlly7QFibnYHzcxDvccMjlpM/Q1ev8ceRIb48w==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+       "dependencies": {[m
+[31m-        "sparse-bitfield": "^3.0.3"[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/querystring-builder": {[m
+[32m+[m[32m      "version": "4.0.5",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/querystring-builder/-/querystring-builder-4.0.5.tgz",[m
+[32m+[m[32m      "integrity": "sha512-NJeSCU57piZ56c+/wY+AbAw6rxCCAOZLCIniRE7wqvndqxcKKDOXzwWjrY7wGKEISfhL9gBbAaWWgHsUGedk+A==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/util-uri-escape": "^4.0.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/querystring-parser": {[m
+[32m+[m[32m      "version": "4.0.5",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/querystring-parser/-/querystring-parser-4.0.5.tgz",[m
+[32m+[m[32m      "integrity": "sha512-6SV7md2CzNG/WUeTjVe6Dj8noH32r4MnUeFKZrnVYsQxpGSIcphAanQMayi8jJLZAWm6pdM9ZXvKCpWOsIGg0w==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/service-error-classification": {[m
+[32m+[m[32m      "version": "4.0.7",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/service-error-classification/-/service-error-classification-4.0.7.tgz",[m
+[32m+[m[32m      "integrity": "sha512-XvRHOipqpwNhEjDf2L5gJowZEm5nsxC16pAZOeEcsygdjv9A2jdOh3YoDQvOXBGTsaJk6mNWtzWalOB9976Wlg==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/types": "^4.3.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/shared-ini-file-loader": {[m
+[32m+[m[32m      "version": "4.0.5",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/shared-ini-file-loader/-/shared-ini-file-loader-4.0.5.tgz",[m
+[32m+[m[32m      "integrity": "sha512-YVVwehRDuehgoXdEL4r1tAAzdaDgaC9EQvhK0lEbfnbrd0bd5+CTQumbdPryX3J2shT7ZqQE+jPW4lmNBAB8JQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/signature-v4": {[m
+[32m+[m[32m      "version": "5.1.3",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/signature-v4/-/signature-v4-5.1.3.tgz",[m
+[32m+[m[32m      "integrity": "sha512-mARDSXSEgllNzMw6N+mC+r1AQlEBO3meEAkR/UlfAgnMzJUB3goRBWgip1EAMG99wh36MDqzo86SfIX5Y+VEaw==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/is-array-buffer": "^4.0.0",[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/util-hex-encoding": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-middleware": "^4.0.5",[m
+[32m+[m[32m        "@smithy/util-uri-escape": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-utf8": "^4.0.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/smithy-client": {[m
+[32m+[m[32m      "version": "4.4.10",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/smithy-client/-/smithy-client-4.4.10.tgz",[m
+[32m+[m[32m      "integrity": "sha512-iW6HjXqN0oPtRS0NK/zzZ4zZeGESIFcxj2FkWed3mcK8jdSdHzvnCKXSjvewESKAgGKAbJRA+OsaqKhkdYRbQQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/core": "^3.8.0",[m
+[32m+[m[32m        "@smithy/middleware-endpoint": "^4.1.18",[m
+[32m+[m[32m        "@smithy/middleware-stack": "^4.0.5",[m
+[32m+[m[32m        "@smithy/protocol-http": "^5.1.3",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/util-stream": "^4.2.4",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/types": {[m
+[32m+[m[32m      "version": "4.3.2",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/types/-/types-4.3.2.tgz",[m
+[32m+[m[32m      "integrity": "sha512-QO4zghLxiQ5W9UZmX2Lo0nta2PuE1sSrXUYDoaB6HMR762C0P7v/HEPHf6ZdglTVssJG1bsrSBxdc3quvDSihw==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/url-parser": {[m
+[32m+[m[32m      "version": "4.0.5",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/url-parser/-/url-parser-4.0.5.tgz",[m
+[32m+[m[32m      "integrity": "sha512-j+733Um7f1/DXjYhCbvNXABV53NyCRRA54C7bNEIxNPs0YjfRxeMKjjgm2jvTYrciZyCjsicHwQ6Q0ylo+NAUw==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/querystring-parser": "^4.0.5",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/util-base64": {[m
+[32m+[m[32m      "version": "4.0.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-base64/-/util-base64-4.0.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-CvHfCmO2mchox9kjrtzoHkWHxjHZzaFojLc8quxXY7WAAMAg43nuxwv95tATVgQFNDwd4M9S1qFzj40Ul41Kmg==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/util-buffer-from": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-utf8": "^4.0.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/util-body-length-browser": {[m
+[32m+[m[32m      "version": "4.0.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-body-length-browser/-/util-body-length-browser-4.0.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-sNi3DL0/k64/LO3A256M+m3CDdG6V7WKWHdAiBBMUN8S3hK3aMPhwnPik2A/a2ONN+9doY9UxaLfgqsIRg69QA==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/util-body-length-node": {[m
+[32m+[m[32m      "version": "4.0.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-body-length-node/-/util-body-length-node-4.0.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-q0iDP3VsZzqJyje8xJWEJCNIu3lktUGVoSy1KB0UWym2CL1siV3artm+u1DFYTLejpsrdGyCSWBdGNjJzfDPjg==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/util-buffer-from": {[m
+[32m+[m[32m      "version": "4.0.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-buffer-from/-/util-buffer-from-4.0.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-9TOQ7781sZvddgO8nxueKi3+yGvkY35kotA0Y6BWRajAv8jjmigQ1sBwz0UX47pQMYXJPahSKEKYFgt+rXdcug==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/is-array-buffer": "^4.0.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/util-config-provider": {[m
+[32m+[m[32m      "version": "4.0.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-config-provider/-/util-config-provider-4.0.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-L1RBVzLyfE8OXH+1hsJ8p+acNUSirQnWQ6/EgpchV88G6zGBTDPdXiiExei6Z1wR2RxYvxY/XLw6AMNCCt8H3w==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/util-defaults-mode-browser": {[m
+[32m+[m[32m      "version": "4.0.26",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-defaults-mode-browser/-/util-defaults-mode-browser-4.0.26.tgz",[m
+[32m+[m[32m      "integrity": "sha512-xgl75aHIS/3rrGp7iTxQAOELYeyiwBu+eEgAk4xfKwJJ0L8VUjhO2shsDpeil54BOFsqmk5xfdesiewbUY5tKQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/property-provider": "^4.0.5",[m
+[32m+[m[32m        "@smithy/smithy-client": "^4.4.10",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "bowser": "^2.11.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/util-defaults-mode-node": {[m
+[32m+[m[32m      "version": "4.0.26",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-defaults-mode-node/-/util-defaults-mode-node-4.0.26.tgz",[m
+[32m+[m[32m      "integrity": "sha512-z81yyIkGiLLYVDetKTUeCZQ8x20EEzvQjrqJtb/mXnevLq2+w3XCEWTJ2pMp401b6BkEkHVfXb/cROBpVauLMQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/config-resolver": "^4.1.5",[m
+[32m+[m[32m        "@smithy/credential-provider-imds": "^4.0.7",[m
+[32m+[m[32m        "@smithy/node-config-provider": "^4.1.4",[m
+[32m+[m[32m        "@smithy/property-provider": "^4.0.5",[m
+[32m+[m[32m        "@smithy/smithy-client": "^4.4.10",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/util-endpoints": {[m
+[32m+[m[32m      "version": "3.0.7",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-endpoints/-/util-endpoints-3.0.7.tgz",[m
+[32m+[m[32m      "integrity": "sha512-klGBP+RpBp6V5JbrY2C/VKnHXn3d5V2YrifZbmMY8os7M6m8wdYFoO6w/fe5VkP+YVwrEktW3IWYaSQVNZJ8oQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/node-config-provider": "^4.1.4",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/util-hex-encoding": {[m
+[32m+[m[32m      "version": "4.0.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-hex-encoding/-/util-hex-encoding-4.0.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-Yk5mLhHtfIgW2W2WQZWSg5kuMZCVbvhFmC7rV4IO2QqnZdbEFPmQnCcGMAX2z/8Qj3B9hYYNjZOhWym+RwhePw==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/util-middleware": {[m
+[32m+[m[32m      "version": "4.0.5",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-middleware/-/util-middleware-4.0.5.tgz",[m
+[32m+[m[32m      "integrity": "sha512-N40PfqsZHRSsByGB81HhSo+uvMxEHT+9e255S53pfBw/wI6WKDI7Jw9oyu5tJTLwZzV5DsMha3ji8jk9dsHmQQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/util-retry": {[m
+[32m+[m[32m      "version": "4.0.7",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-retry/-/util-retry-4.0.7.tgz",[m
+[32m+[m[32m      "integrity": "sha512-TTO6rt0ppK70alZpkjwy+3nQlTiqNfoXja+qwuAchIEAIoSZW8Qyd76dvBv3I5bCpE38APafG23Y/u270NspiQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/service-error-classification": "^4.0.7",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/util-stream": {[m
+[32m+[m[32m      "version": "4.2.4",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-stream/-/util-stream-4.2.4.tgz",[m
+[32m+[m[32m      "integrity": "sha512-vSKnvNZX2BXzl0U2RgCLOwWaAP9x/ddd/XobPK02pCbzRm5s55M53uwb1rl/Ts7RXZvdJZerPkA+en2FDghLuQ==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/fetch-http-handler": "^5.1.1",[m
+[32m+[m[32m        "@smithy/node-http-handler": "^4.1.1",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "@smithy/util-base64": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-buffer-from": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-hex-encoding": "^4.0.0",[m
+[32m+[m[32m        "@smithy/util-utf8": "^4.0.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/util-uri-escape": {[m
+[32m+[m[32m      "version": "4.0.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-uri-escape/-/util-uri-escape-4.0.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-77yfbCbQMtgtTylO9itEAdpPXSog3ZxMe09AEhm0dU0NLTalV70ghDZFR+Nfi1C60jnJoh/Re4090/DuZh2Omg==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/util-utf8": {[m
+[32m+[m[32m      "version": "4.0.0",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-utf8/-/util-utf8-4.0.0.tgz",[m
+[32m+[m[32m      "integrity": "sha512-b+zebfKCfRdgNJDknHCob3O7FpeYQN6ZG6YLExMcasDHsCXlsXCEuiPZeLnJLpwa5dvPetGlnGCiMHuLwGvFow==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/util-buffer-from": "^4.0.0",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+[32m+[m[32m    "node_modules/@smithy/util-waiter": {[m
+[32m+[m[32m      "version": "4.0.7",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@smithy/util-waiter/-/util-waiter-4.0.7.tgz",[m
+[32m+[m[32m      "integrity": "sha512-mYqtQXPmrwvUljaHyGxYUIIRI3qjBTEb/f5QFi3A6VlxhpmZd5mWXn9W+qUkf2pVE1Hv3SqxefiZOPGdxmO64A==",[m
+[32m+[m[32m      "license": "Apache-2.0",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "@smithy/abort-controller": "^4.0.5",[m
+[32m+[m[32m        "@smithy/types": "^4.3.2",[m
+[32m+[m[32m        "tslib": "^2.6.2"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "engines": {[m
+[32m+[m[32m        "node": ">=18.0.0"[m
+       }[m
+     },[m
+     "node_modules/@socket.io/component-emitter": {[m
+[36m@@ -227,11 +1435,12 @@[m
+       }[m
+     },[m
+     "node_modules/@types/nodemailer": {[m
+[31m-      "version": "6.4.17",[m
+[31m-      "resolved": "https://registry.npmjs.org/@types/nodemailer/-/nodemailer-6.4.17.tgz",[m
+[31m-      "integrity": "sha512-I9CCaIp6DTldEg7vyUTZi8+9Vo0hi1/T8gv3C89yk1rSAAzoKQ8H8ki/jBYJSFoH/BisgLP8tkZMlQ91CIquww==",[m
+[32m+[m[32m      "version": "6.4.19",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@types/nodemailer/-/nodemailer-6.4.19.tgz",[m
+[32m+[m[32m      "integrity": "sha512-Fi8DwmuAduTk1/1MpkR9EwS0SsDvYXx5RxivAVII1InDCIxmhj/iQm3W8S3EVb/0arnblr6PK0FK4wYa7bwdLg==",[m
+       "license": "MIT",[m
+       "dependencies": {[m
+[32m+[m[32m        "@aws-sdk/client-ses": "^3.731.1",[m
+         "@types/node": "*"[m
+       }[m
+     },[m
+[36m@@ -287,6 +1496,12 @@[m
+         "socket.io": "*"[m
+       }[m
+     },[m
+[32m+[m[32m    "node_modules/@types/uuid": {[m
+[32m+[m[32m      "version": "9.0.8",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/@types/uuid/-/uuid-9.0.8.tgz",[m
+[32m+[m[32m      "integrity": "sha512-jg+97EGIcY9AGHJJRaaPVgetKDsrTgbRjQ5Msgjh/DQKEFl0DtyRr/VCOyD1T2R1MNeWPK/u7JoGhlDZnKBAfA==",[m
+[32m+[m[32m      "license": "MIT"[m
+[32m+[m[32m    },[m
+     "node_modules/@types/webidl-conversions": {[m
+       "version": "7.0.3",[m
+       "resolved": "https://registry.npmjs.org/@types/webidl-conversions/-/webidl-conversions-7.0.3.tgz",[m
+[36m@@ -449,6 +1664,12 @@[m
+         "node": ">=18"[m
+       }[m
+     },[m
+[32m+[m[32m    "node_modules/bowser": {[m
+[32m+[m[32m      "version": "2.12.1",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/bowser/-/bowser-2.12.1.tgz",[m
+[32m+[m[32m      "integrity": "sha512-z4rE2Gxh7tvshQ4hluIT7XcFrgLIQaw9X3A+kTTRdovCz5PMukm/0QC/BKSYPj3omF5Qfypn9O/c5kgpmvYUCw==",[m
+[32m+[m[32m      "license": "MIT"[m
+[32m+[m[32m    },[m
+     "node_modules/brace-expansion": {[m
+       "version": "1.1.11",[m
+       "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.11.tgz",[m
+[36m@@ -978,6 +2199,24 @@[m
+         "url": "https://opencollective.com/express"[m
+       }[m
+     },[m
+[32m+[m[32m    "node_modules/fast-xml-parser": {[m
+[32m+[m[32m      "version": "5.2.5",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/fast-xml-parser/-/fast-xml-parser-5.2.5.tgz",[m
+[32m+[m[32m      "integrity": "sha512-pfX9uG9Ki0yekDHx2SiuRIyFdyAr1kMIMitPvb0YBo8SUfKvia7w7FIyd/l6av85pFYRhZscS75MwMnbvY+hcQ==",[m
+[32m+[m[32m      "funding": [[m
+[32m+[m[32m        {[m
+[32m+[m[32m          "type": "github",[m
+[32m+[m[32m          "url": "https://github.com/sponsors/NaturalIntelligence"[m
+[32m+[m[32m        }[m
+[32m+[m[32m      ],[m
+[32m+[m[32m      "license": "MIT",[m
+[32m+[m[32m      "dependencies": {[m
+[32m+[m[32m        "strnum": "^2.1.0"[m
+[32m+[m[32m      },[m
+[32m+[m[32m      "bin": {[m
+[32m+[m[32m        "fxparser": "src/cli/cli.js"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+     "node_modules/fill-range": {[m
+       "version": "7.1.1",[m
+       "resolved": "https://registry.npmjs.org/fill-range/-/fill-range-7.1.1.tgz",[m
+[36m@@ -1606,9 +2845,9 @@[m
+       }[m
+     },[m
+     "node_modules/nodemailer": {[m
+[31m-      "version": "7.0.3",[m
+[31m-      "resolved": "https://registry.npmjs.org/nodemailer/-/nodemailer-7.0.3.tgz",[m
+[31m-      "integrity": "sha512-Ajq6Sz1x7cIK3pN6KesGTah+1gnwMnx5gKl3piQlQQE/PwyJ4Mbc8is2psWYxK3RJTVeqsDaCv8ZzXLCDHMTZw==",[m
+[32m+[m[32m      "version": "7.0.5",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/nodemailer/-/nodemailer-7.0.5.tgz",[m
+[32m+[m[32m      "integrity": "sha512-nsrh2lO3j4GkLLXoeEksAMgAOqxOv6QumNRVQTJwKH4nuiww6iC2y7GyANs9kRAxCexg3+lTWM3PZ91iLlVjfg==",[m
+       "license": "MIT-0",[m
+       "engines": {[m
+         "node": ">=6.0.0"[m
+[36m@@ -2298,6 +3537,18 @@[m
+         "node": ">=8"[m
+       }[m
+     },[m
+[32m+[m[32m    "node_modules/strnum": {[m
+[32m+[m[32m      "version": "2.1.1",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/strnum/-/strnum-2.1.1.tgz",[m
+[32m+[m[32m      "integrity": "sha512-7ZvoFTiCnGxBtDqJ//Cu6fWtZtc7Y3x+QOirG15wztbdngGSkht27o2pyGWrVy0b4WAy3jbKmnoK6g5VlVNUUw==",[m
+[32m+[m[32m      "funding": [[m
+[32m+[m[32m        {[m
+[32m+[m[32m          "type": "github",[m
+[32m+[m[32m          "url": "https://github.com/sponsors/NaturalIntelligence"[m
+[32m+[m[32m        }[m
+[32m+[m[32m      ],[m
+[32m+[m[32m      "license": "MIT"[m
+[32m+[m[32m    },[m
+     "node_modules/supports-color": {[m
+       "version": "5.5.0",[m
+       "resolved": "https://registry.npmjs.org/supports-color/-/supports-color-5.5.0.tgz",[m
+[36m@@ -2399,6 +3650,12 @@[m
+         }[m
+       }[m
+     },[m
+[32m+[m[32m    "node_modules/tslib": {[m
+[32m+[m[32m      "version": "2.8.1",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/tslib/-/tslib-2.8.1.tgz",[m
+[32m+[m[32m      "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==",[m
+[32m+[m[32m      "license": "0BSD"[m
+[32m+[m[32m    },[m
+     "node_modules/type-is": {[m
+       "version": "2.0.1",[m
+       "resolved": "https://registry.npmjs.org/type-is/-/type-is-2.0.1.tgz",[m
+[36m@@ -2448,6 +3705,19 @@[m
+         "node": ">= 0.8"[m
+       }[m
+     },[m
+[32m+[m[32m    "node_modules/uuid": {[m
+[32m+[m[32m      "version": "9.0.1",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/uuid/-/uuid-9.0.1.tgz",[m
+[32m+[m[32m      "integrity": "sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==",[m
+[32m+[m[32m      "funding": [[m
+[32m+[m[32m        "https://github.com/sponsors/broofa",[m
+[32m+[m[32m        "https://github.com/sponsors/ctavan"[m
+[32m+[m[32m      ],[m
+[32m+[m[32m      "license": "MIT",[m
+[32m+[m[32m      "bin": {[m
+[32m+[m[32m        "uuid": "dist/bin/uuid"[m
+[32m+[m[32m      }[m
+[32m+[m[32m    },[m
+     "node_modules/v8-compile-cache-lib": {[m
+       "version": "3.0.1",[m
+       "resolved": "https://registry.npmjs.org/v8-compile-cache-lib/-/v8-compile-cache-lib-3.0.1.tgz",[m
+[1mdiff --git a/package.json b/package.json[m
+[1mindex aeb0ca9..1e984d8 100644[m
+[1m--- a/package.json[m
+[1m+++ b/package.json[m
+[36m@@ -30,7 +30,7 @@[m
+     "@types/express": "^5.0.2",[m
+     "@types/jsonwebtoken": "^9.0.9",[m
+     "@types/node": "^22.15.18",[m
+[31m-    "@types/nodemailer": "^6.4.17",[m
+[32m+[m[32m    "@types/nodemailer": "^6.4.19",[m
+     "@types/qrcode": "^1.5.5",[m
+     "@types/socket.io": "^3.0.2",[m
+     "bcrypt": "^6.0.0",[m
+[36m@@ -40,7 +40,7 @@[m
+     "helmet": "^8.1.0",[m
+     "jsonwebtoken": "^9.0.2",[m
+     "mongoose": "^8.15.0",[m
+[31m-    "nodemailer": "^7.0.3",[m
+[32m+[m[32m    "nodemailer": "^7.0.5",[m
+     "qrcode": "^1.5.4",[m
+     "socket.io": "^4.7.2",[m
+     "socket.io-client": "^4.7.2",[m
+[1mdiff --git a/src/controllers/bookingController.ts b/src/controllers/bookingController.ts[m
+[1mindex a6d1084..3ea5057 100644[m
+[1m--- a/src/controllers/bookingController.ts[m
+[1m+++ b/src/controllers/bookingController.ts[m
+[36m@@ -6,6 +6,7 @@[m [mimport Route from '../models/Route';[m
+ import Payment from '../models/Payment';[m
+ import User from '../models/User';[m
+ import * as QRCode from 'qrcode';[m
+[32m+[m[32mimport sendEmail from '../utils/sendEmail';[m
+ [m
+ // Payment method mapping function[m
+ const mapPaymentMethod = (frontendMethod: string): string => {[m
+[36m@@ -996,7 +997,7 @@[m [mexport const sendTicketByEmail = async (req: Request, res: Response): Promise<vo[m
+     }[m
+ [m
+     const { id } = req.params;[m
+[31m-    const { email, qrCode } = req.body;[m
+[32m+[m[32m    const { email } = req.body;[m
+ [m
+     console.log('Email ticket request:', { bookingId: id, email });[m
+ [m
+[36m@@ -1019,6 +1020,38 @@[m [mexport const sendTicketByEmail = async (req: Request, res: Response): Promise<vo[m
+       return; [m
+     }[m
+ [m
+[32m+[m[32m    // Generate QR code[m
+[32m+[m[32m    let qrCodeData: string;[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      const qrText = JSON.stringify({[m
+[32m+[m[32m        booking: booking.bookingId,[m
+[32m+[m[32m        passenger: booking.passengerInfo.name,[m
+[32m+[m[32m        seat: booking.seatInfo.seatNumber,[m
+[32m+[m[32m        date: booking.travelDate.toISOString().split('T')[0],[m
+[32m+[m[32m        time: booking.departureTime,[m
+[32m+[m[32m        verification: `SRI-EXPRESS-${booking.bookingId}`[m
+[32m+[m[32m      });[m
+[32m+[m[41m      [m
+[32m+[m[32m      qrCodeData = await QRCode.toDataURL(qrText, {[m
+[32m+[m[32m        errorCorrectionLevel: 'M',[m
+[32m+[m[32m        type: 'image/png',[m
+[32m+[m[32m        margin: 1,[m
+[32m+[m[32m        color: {[m
+[32m+[m[32m          dark: '#000000',[m
+[32m+[m[32m          light: '#FFFFFF'[m
+[32m+[m[32m        },[m
+[32m+[m[32m        width: 400[m
+[32m+[m[32m      });[m
+[32m+[m
+[32m+[m[32m      console.log('QR code generated successfully for email');[m
+[32m+[m[32m    } catch (qrError) {[m
+[32m+[m[32m      console.error('QR code generation failed for email:', qrError);[m
+[32m+[m[41m      [m
+[32m+[m[32m      // Fallback to simple QR code[m
+[32m+[m[32m      const fallbackQrText = `SRI-EXPRESS-${booking.bookingId}-${booking.passengerInfo.name}-${booking.seatInfo.seatNumber}`;[m
+[32m+[m[32m      qrCodeData = `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><rect width='200' height='200' fill='white'/><text x='100' y='100' text-anchor='middle' font-size='12' fill='black'>${booking.bookingId}</text></svg>`;[m
+[32m+[m[32m    }[m
+[32m+[m
+     // Create email HTML template[m
+     const emailHtml = `[m
+       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8f9fa;">[m
+[36m@@ -1033,7 +1066,7 @@[m [mexport const sendTicketByEmail = async (req: Request, res: Response): Promise<vo[m
+           <!-- QR Code Section -->[m
+           <div style="text-align: center; margin: 2rem 0;">[m
+             <div style="display: inline-block; padding: 1rem; background: white; border-radius: 12px; border: 3px solid #F59E0B; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);">[m
+[31m-              <img src="${qrCode}" alt="Ticket QR Code" style="max-width: 200px; width: 100%; height: auto; display: block;" />[m
+[32m+[m[32m              <img src="${qrCodeData}" alt="Ticket QR Code" style="max-width: 200px; width: 100%; height: auto; display: block;" />[m
+             </div>[m
+             <p style="margin-top: 1rem; color: #666; font-size: 1.1rem; font-weight: 500;">Show this QR code to the conductor</p>[m
+           </div>[m
+[36m@@ -1095,21 +1128,37 @@[m [mexport const sendTicketByEmail = async (req: Request, res: Response): Promise<vo[m
+       </div>[m
+     `;[m
+ [m
+[31m-    // Import and use the sendEmail function[m
+[31m-    const sendEmail = require('../../utils/sendEmail').default;[m
+[31m-    [m
+[31m-    await sendEmail({[m
+[31m-      email: email || booking.passengerInfo.email,[m
+[31m-      subject: `ශ්‍රී Express - Your E-Ticket (${booking.bookingId})`,[m
+[31m-      html: emailHtml[m
+[31m-    });[m
+[32m+[m[32m    // Send email using the imported function[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      await sendEmail({[m
+[32m+[m[32m        email: email || booking.passengerInfo.email,[m
+[32m+[m[32m        subject: `ශ්‍රී Express - Your E-Ticket (${booking.bookingId})`,[m
+[32m+[m[32m        html: emailHtml[m
+[32m+[m[32m      });[m
+ [m
+[31m-    console.log('Ticket email sent successfully to:', email || booking.passengerInfo.email);[m
+[32m+[m[32m      console.log('Ticket email sent successfully to:', email || booking.passengerInfo.email);[m
+ [m
+[31m-    res.json({ [m
+[31m-      message: 'Ticket sent successfully via email',[m
+[31m-      sentTo: email || booking.passengerInfo.email[m
+[31m-    });[m
+[32m+[m[32m      res.json({[m[41m [m
+[32m+[m[32m        message: 'Ticket sent successfully via email',[m
+[32m+[m[32m        sentTo: email || booking.passengerInfo.email,[m
+[32m+[m[32m        qrCodeGenerated: true[m
+[32m+[m[32m      });[m
+[32m+[m[32m    } catch (emailError) {[m
+[32m+[m[32m      console.error('Email sending failed, but QR was generated:', emailError);[m
+[32m+[m[41m      [m
+[32m+[m[32m      // In development mode, return success with a warning[m
+[32m+[m[32m      if (process.env.NODE_ENV === 'development') {[m
+[32m+[m[32m        res.json({[m[41m [m
+[32m+[m[32m          message: 'QR code generated successfully (email sending failed in development mode)',[m
+[32m+[m[32m          sentTo: email || booking.passengerInfo.email,[m
+[32m+[m[32m          qrCodeGenerated: true,[m
+[32m+[m[32m          emailWarning: 'Email sending failed - check SMTP configuration',[m
+[32m+[m[32m          error: emailError instanceof Error ? emailError.message : 'Unknown email error'[m
+[32m+[m[32m        });[m
+[32m+[m[32m      } else {[m
+[32m+[m[32m        throw emailError;[m
+[32m+[m[32m      }[m
+[32m+[m[32m    }[m
+ [m
+   } catch (error) {[m
+     console.error('Send ticket email error:', error);[m
+[1mdiff --git a/src/routes/bookingRoutes.ts b/src/routes/bookingRoutes.ts[m
+[1mindex 2abe621..583456e 100644[m
+[1m--- a/src/routes/bookingRoutes.ts[m
+[1m+++ b/src/routes/bookingRoutes.ts[m
+[36m@@ -8,6 +8,7 @@[m [mimport {[m
+   updateBooking,[m
+   cancelBooking,[m
+   generateQRCode,[m
+[32m+[m[32m  sendTicketByEmail,[m
+   checkInPassenger,[m
+   getBookingStats[m
+ } from '../controllers/bookingController';[m
+[36m@@ -27,6 +28,7 @@[m [mrouter.get('/:id', getBookingById);[m
+ router.put('/:id', updateBooking);[m
+ router.put('/:id/cancel', cancelBooking);[m
+ router.post('/:id/qr', generateQRCode);[m
+[32m+[m[32mrouter.post('/:id/email-ticket', sendTicketByEmail);[m
+ router.post('/:id/checkin', checkInPassenger);[m
+ [m
+ export default router;[m
+\ No newline at end of file[m
+[1mdiff --git a/src/utils/sendEmail.ts b/src/utils/sendEmail.ts[m
+[1mindex 8fd1bad..04fb0b7 100644[m
+[1m--- a/src/utils/sendEmail.ts[m
+[1m+++ b/src/utils/sendEmail.ts[m
+[36m@@ -4,60 +4,208 @@[m [mimport nodemailer from 'nodemailer';[m
+ interface EmailOptions {[m
+   email: string;[m
+   subject: string;[m
+[31m-  html: string;[m
+[32m+[m[32m  text?: string;[m
+[32m+[m[32m  htmlContent?: string;  // New format[m
+[32m+[m[32m  html?: string;         // Legacy format for backward compatibility[m
+[32m+[m[32m  replacements?: Record<string, string>;[m
+ }[m
+ [m
+[32m+[m[32m// Brevo Transporter Configuration[m
+[32m+[m[32mconst transporter = nodemailer.createTransport({[m
+[32m+[m[32m  host: 'smtp-relay.brevo.com',[m
+[32m+[m[32m  port: 587,[m
+[32m+[m[32m  auth: {[m
+[32m+[m[32m    user: process.env.SMTP_USER,[m
+[32m+[m[32m    pass: process.env.SMTP_PASSWORD,[m
+[32m+[m[32m  },[m
+[32m+[m[32m});[m
+[32m+[m
+[32m+[m[32m/**[m
+[32m+[m[32m * Sends an email using the pre-configured Brevo transporter.[m
+[32m+[m[32m * Supports HTML content with placeholder replacement.[m
+[32m+[m[32m */[m
+ const sendEmail = async (options: EmailOptions): Promise<void> => {[m
+[31m-  try {[m
+[31m-    // Create a transporter[m
+[31m-    const transporter = nodemailer.createTransport({[m
+[31m-      host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',[m
+[31m-      port: parseInt(process.env.SMTP_PORT || '587'),[m
+[31m-      secure: parseInt(process.env.SMTP_PORT || '587') === 465, // true for 465 (SSL)[m
+[31m-      auth: {[m
+[31m-        user: process.env.SMTP_USER || '',[m
+[31m-        pass: process.env.SMTP_PASSWORD || '',[m
+[31m-      },[m
+[32m+[m[32m  // Check if required transporter config environment variables were loaded[m
+[32m+[m[32m  if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {[m
+[32m+[m[32m    console.error("[Email] ERROR: Missing required Brevo email configuration environment variables (SMTP_USER, SMTP_PASSWORD).");[m
+[32m+[m[32m    throw new Error('Email service (Brevo) is not configured. Please set SMTP_USER and SMTP_PASSWORD environment variables.');[m
+[32m+[m[32m  }[m
+[32m+[m
+[32m+[m[32m  // 1. Prepare HTML content with replacements (support both htmlContent and html properties)[m
+[32m+[m[32m  let finalHtml = options.htmlContent || options.html || '';[m
+[32m+[m[32m  if (options.replacements) {[m
+[32m+[m[32m    const replacements = options.replacements;[m
+[32m+[m[32m    Object.keys(replacements).forEach(key => {[m
+[32m+[m[32m      // Simple regex replace for placeholders like {{key}}[m
+[32m+[m[32m      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');[m
+[32m+[m[32m      finalHtml = finalHtml.replace(regex, replacements[key]);[m
+     });[m
+[32m+[m[32m  }[m
+ [m
+[31m-    // Define email options[m
+[31m-    const mailOptions = {[m
+[31m-      from: process.env.EMAIL_FROM || '"ශ්‍රී Express" <noreply@sri-express.com>',[m
+[31m-      to: options.email,[m
+[31m-      subject: options.subject,[m
+[31m-      html: options.html,[m
+[31m-    };[m
+[32m+[m[32m  // 2. Define the email options[m
+[32m+[m[32m  const mailOptions = {[m
+[32m+[m[32m    from: process.env.EMAIL_FROM || `"Sri Express" <${process.env.SMTP_USER}>`,[m
+[32m+[m[32m    to: options.email,[m
+[32m+[m[32m    subject: options.subject,[m
+[32m+[m[32m    text: options.text || 'Please view this email in an HTML-compatible client.',[m
+[32m+[m[32m    html: finalHtml,[m
+[32m+[m[32m  };[m
+ [m
+[31m-    // Send the email[m
+[32m+[m[32m  // 3. Actually send the email using the pre-configured transporter[m
+[32m+[m[32m  try {[m
+     const info = await transporter.sendMail(mailOptions);[m
+[31m-    console.log('Email sent successfully:', info.messageId);[m
+[32m+[m[32m    console.log(`[Email] Message sent via Brevo: ${info.messageId} to ${options.email}`);[m
+   } catch (error) {[m
+[31m-    console.error('Error sending email:', error);[m
+[31m-    throw new Error('Email could not be sent');[m
+[32m+[m[32m    console.error(`[Email] Error sending email via Brevo to ${options.email}:`, error);[m
+[32m+[m[32m    throw new Error(`Email could not be sent via Brevo. Reason: ${error instanceof Error ? error.message : 'Unknown error'}`);[m
+   }[m
+ };[m
+ [m
+[32m+[m[32mexport const sendTicketEmail = async ([m
+[32m+[m[32m  email: string,[m
+[32m+[m[32m  passengerName: string,[m
+[32m+[m[32m  bookingId: string,[m
+[32m+[m[32m  qrCodeDataURL: string,[m
+[32m+[m[32m  bookingDetails: any[m
+[32m+[m[32m): Promise<void> => {[m
+[32m+[m[32m  const htmlContent = `[m
+[32m+[m[32m    <!DOCTYPE html>[m
+[32m+[m[32m    <html>[m
+[32m+[m[32m    <head>[m
+[32m+[m[32m      <meta charset="utf-8">[m
+[32m+[m[32m      <title>Sri Express - Your Ticket</title>[m
+[32m+[m[32m      <style>[m
+[32m+[m[32m        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f8f9fa; }[m
+[32m+[m[32m        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }[m
+[32m+[m[32m        .header { background: linear-gradient(135deg, #F59E0B, #EF4444); color: white; padding: 30px 20px; text-align: center; }[m
+[32m+[m[32m        .header h1 { margin: 0; font-size: 32px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }[m
+[32m+[m[32m        .header p { margin: 10px 0 0 0; opacity: 0.9; font-size: 16px; }[m
+[32m+[m[32m        .content { padding: 30px; }[m
+[32m+[m[32m        .greeting { font-size: 18px; color: #333; margin-bottom: 20px; }[m
+[32m+[m[32m        .qr-section { text-align: center; margin: 30px 0; }[m
+[32m+[m[32m        .qr-code { border: 3px solid #F59E0B; border-radius: 12px; padding: 15px; display: inline-block; background: white; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2); }[m
+[32m+[m[32m        .qr-code img { max-width: 200px; display: block; }[m
+[32m+[m[32m        .qr-instruction { margin-top: 15px; color: #666; font-size: 16px; font-weight: 500; }[m
+[32m+[m[32m        .details { margin: 30px 0; }[m
+[32m+[m[32m        .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }[m
+[32m+[m[32m        .detail-item { padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #F59E0B; }[m
+[32m+[m[32m        .detail-label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }[m
+[32m+[m[32m        .detail-value { font-size: 16px; color: #333; font-weight: 600; }[m
+[32m+[m[32m        .important { background: #FEF3C7; padding: 20px; border-radius: 8px; margin: 30px 0; border: 1px solid #F59E0B; border-left: 4px solid #F59E0B; }[m
+[32m+[m[32m        .important h3 { margin: 0 0 15px 0; color: #92400E; font-size: 18px; }[m
+[32m+[m[32m        .important ul { margin: 10px 0; padding-left: 20px; color: #92400E; line-height: 1.6; }[m
+[32m+[m[32m        .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; font-size: 14px; border-top: 1px solid #eee; }[m
+[32m+[m[32m      </style>[m
+[32m+[m[32m    </head>[m
+[32m+[m[32m    <body>[m
+[32m+[m[32m      <div class="container">[m
+[32m+[m[32m        <div class="header">[m
+[32m+[m[32m          <h1>{{companyName}}</h1>[m
+[32m+[m[32m          <p>Your Electronic Ticket</p>[m
+[32m+[m[32m        </div>[m
+[32m+[m[41m        [m
+[32m+[m[32m        <div class="content">[m
+[32m+[m[32m          <div class="greeting">[m
+[32m+[m[32m            Dear {{passengerName}},[m
+[32m+[m[32m          </div>[m
+[32m+[m[41m          [m
+[32m+[m[32m          <p>Your booking has been confirmed! Please find your e-ticket details below.</p>[m
+[32m+[m[41m          [m
+[32m+[m[32m          <div class="qr-section">[m
+[32m+[m[32m            <div class="qr-code">[m
+[32m+[m[32m              <img src="{{qrCodeDataURL}}" alt="Ticket QR Code" />[m
+[32m+[m[32m            </div>[m
+[32m+[m[32m            <div class="qr-instruction">Show this QR code to the conductor</div>[m
+[32m+[m[32m          </div>[m
+[32m+[m[41m          [m
+[32m+[m[32m          <div class="details">[m
+[32m+[m[32m            <div class="detail-grid">[m
+[32m+[m[32m              <div class="detail-item">[m
+[32m+[m[32m                <div class="detail-label">Booking ID</div>[m
+[32m+[m[32m                <div class="detail-value">{{bookingId}}</div>[m
+[32m+[m[32m              </div>[m
+[32m+[m[32m              <div class="detail-item">[m
+[32m+[m[32m                <div class="detail-label">Passenger</div>[m
+[32m+[m[32m                <div class="detail-value">{{passengerName}}</div>[m
+[32m+[m[32m              </div>[m
+[32m+[m[32m              <div class="detail-item">[m
+[32m+[m[32m                <div class="detail-label">Route</div>[m
+[32m+[m[32m                <div class="detail-value">{{routeName}}</div>[m
+[32m+[m[32m              </div>[m
+[32m+[m[32m              <div class="detail-item">[m
+[32m+[m[32m                <div class="detail-label">Travel Date</div>[m
+[32m+[m[32m                <div class="detail-value">{{travelDate}}</div>[m
+[32m+[m[32m              </div>[m
+[32m+[m[32m              <div class="detail-item">[m
+[32m+[m[32m                <div class="detail-label">Departure Time</div>[m
+[32m+[m[32m                <div class="detail-value">{{departureTime}}</div>[m
+[32m+[m[32m              </div>[m
+[32m+[m[32m              <div class="detail-item">[m
+[32m+[m[32m                <div class="detail-label">Seat</div>[m
+[32m+[m[32m                <div class="detail-value">{{seatInfo}}</div>[m
+[32m+[m[32m              </div>[m
+[32m+[m[32m            </div>[m
+[32m+[m[32m          </div>[m
+[32m+[m[41m          [m
+[32m+[m[32m          <div class="important">[m
+[32m+[m[32m            <h3>Important Instructions</h3>[m
+[32m+[m[32m            <ul>[m
+[32m+[m[32m              <li>Present this QR code for verification before boarding</li>[m
+[32m+[m[32m              <li>Arrive at the departure point 15 minutes early</li>[m
+[32m+[m[32m              <li>Carry valid photo ID matching the passenger name</li>[m
+[32m+[m[32m              <li>This ticket is non-transferable and valid only for the specified journey</li>[m
+[32m+[m[32m              <li>Contact support at +94 11 123 4567 for assistance</li>[m
+[32m+[m[32m            </ul>[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m        </div>[m
+[32m+[m[41m        [m
+[32m+[m[32m        <div class="footer">[m
+[32m+[m[32m          <p>Thank you for choosing {{companyName}}!</p>[m
+[32m+[m[32m          <p>© {{currentYear}} Sri Express. All rights reserved.</p>[m
+[32m+[m[32m        </div>[m
+[32m+[m[32m      </div>[m
+[32m+[m[32m    </body>[m
+[32m+[m[32m    </html>[m
+[32m+[m[32m  `;[m
+[32m+[m
+[32m+[m[32m  await sendEmail({[m
+[32m+[m[32m    email,[m
+[32m+[m[32m    subject: `Sri Express - Your Ticket (${bookingId})`,[m
+[32m+[m[32m    htmlContent,[m
+[32m+[m[32m    replacements: {[m
+[32m+[m[32m      companyName: 'ශ්‍රී Express',[m
+[32m+[m[32m      passengerName,[m
+[32m+[m[32m      bookingId,[m
+[32m+[m[32m      qrCodeDataURL,[m
+[32m+[m[32m      routeName: bookingDetails.routeId?.name || 'N/A',[m
+[32m+[m[32m      travelDate: new Date(bookingDetails.travelDate).toLocaleDateString(),[m
+[32m+[m[32m      departureTime: bookingDetails.departureTime,[m
+[32m+[m[32m      seatInfo: `${bookingDetails.seatInfo?.seatNumber} (${bookingDetails.seatInfo?.seatType})`,[m
+[32m+[m[32m      currentYear: new Date().getFullYear().toString()[m
+[32m+[m[32m    }[m
+[32m+[m[32m  });[m
+[32m+[m[32m};[m
+[32m+[m
+ export const sendPasswordResetOTP = async ([m
+   email: string,[m
+   otp: string,[m
+   name: string[m
+ ): Promise<void> => {[m
+[31m-  // Create professional HTML template[m
+[31m-  const html = `[m
+[32m+[m[32m  const htmlContent = `[m
+     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e4e4e4; border-radius: 8px;">[m
+       <div style="text-align: center; margin-bottom: 20px;">[m
+[31m-        <h1 style="color: #1a73e8; margin-bottom: 5px;">ශ්‍රී Express</h1>[m
+[32m+[m[32m        <h1 style="color: #1a73e8; margin-bottom: 5px;">{{companyName}}</h1>[m
+         <p style="color: #5f6368; font-size: 16px;">Password Reset Request</p>[m
+       </div>[m
+       [m
+       <div style="border-top: 2px solid #f0f0f0; border-bottom: 2px solid #f0f0f0; padding: 20px 0; margin-bottom: 20px;">[m
+[31m-        <p style="margin-bottom: 15px;">Hello${name ? ' ' + name : ''},</p>[m
+[31m-        <p style="margin-bottom: 15px;">You requested a password reset for your ශ්‍රී Express account.</p>[m
+[32m+[m[32m        <p style="margin-bottom: 15px;">Hello{{greeting}},</p>[m
+[32m+[m[32m        <p style="margin-bottom: 15px;">You requested a password reset for your {{companyName}} account.</p>[m
+         <p style="margin-bottom: 15px;">Your One-Time Password (OTP) is:</p>[m
+         [m
+         <div style="text-align: center; margin: 30px 0;">[m
+           <div style="display: inline-block; padding: 15px 30px; background-color: #f8f9fa; border: 1px dashed #1a73e8; border-radius: 4px;">[m
+[31m-            <span style="font-size: 24px; font-weight: bold; color: #1a73e8; letter-spacing: 5px;">${otp}</span>[m
+[32m+[m[32m            <span style="font-size: 24px; font-weight: bold; color: #1a73e8; letter-spacing: 5px;">{{otp}}</span>[m
+           </div>[m
+         </div>[m
+         [m
+[36m@@ -67,7 +215,7 @@[m [mexport const sendPasswordResetOTP = async ([m
+       [m
+       <div style="color: #5f6368; font-size: 13px;">[m
+         <p>If you did not request this password reset, please ignore this email or contact support if you have concerns.</p>[m
+[31m-        <p style="margin-top: 15px;">© ${new Date().getFullYear()} ශ්‍රී Express. All rights reserved.</p>[m
+[32m+[m[32m        <p style="margin-top: 15px;">© {{currentYear}} {{companyName}}. All rights reserved.</p>[m
+       </div>[m
+     </div>[m
+   `;[m
+[36m@@ -75,7 +223,13 @@[m [mexport const sendPasswordResetOTP = async ([m
+   await sendEmail({[m
+     email,[m
+     subject: 'Password Reset OTP for ශ්‍රී Express Account',[m
+[31m-    html,[m
+[32m+[m[32m    htmlContent,[m
+[32m+[m[32m    replacements: {[m
+[32m+[m[32m      companyName: 'ශ්‍රී Express',[m
+[32m+[m[32m      greeting: name ? ` ${name}` : '',[m
+[32m+[m[32m      otp,[m
+[32m+[m[32m      currentYear: new Date().getFullYear().toString()[m
+[32m+[m[32m    }[m
+   });[m
+ };[m
+ [m
