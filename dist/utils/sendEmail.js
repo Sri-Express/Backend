@@ -7,7 +7,7 @@ exports.sendPasswordResetOTP = exports.sendTicketEmail = void 0;
 // src/utils/sendEmail.ts
 const nodemailer_1 = __importDefault(require("nodemailer"));
 // Brevo Transporter Configuration
-const transporter = nodemailer_1.default.createTransporter({
+const transporter = nodemailer_1.default.createTransport({
     host: 'smtp-relay.brevo.com',
     port: 587,
     auth: {
