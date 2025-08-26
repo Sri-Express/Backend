@@ -8,6 +8,7 @@ import {
   updateBooking,
   cancelBooking,
   generateQRCode,
+  sendTicketByEmail,
   checkInPassenger,
   getBookingStats
 } from '../controllers/bookingController';
@@ -27,6 +28,7 @@ router.get('/:id', getBookingById);
 router.put('/:id', updateBooking);
 router.put('/:id/cancel', cancelBooking);
 router.post('/:id/qr', generateQRCode);
+router.post('/:id/email-ticket', sendTicketByEmail);
 router.post('/:id/checkin', checkInPassenger);
 
 export default router;
