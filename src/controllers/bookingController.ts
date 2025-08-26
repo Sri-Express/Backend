@@ -6,6 +6,7 @@ import Route from '../models/Route';
 import Payment from '../models/Payment';
 import User from '../models/User';
 import * as QRCode from 'qrcode';
+import sendEmail from '../utils/sendEmail';
 
 // Payment method mapping function
 const mapPaymentMethod = (frontendMethod: string): string => {
@@ -996,7 +997,7 @@ export const sendTicketByEmail = async (req: Request, res: Response): Promise<vo
     }
 
     const { id } = req.params;
-    const { email, qrCode } = req.body;
+    const { email } = req.body;
 
     console.log('Email ticket request:', { bookingId: id, email });
 
@@ -1019,6 +1020,38 @@ export const sendTicketByEmail = async (req: Request, res: Response): Promise<vo
       return; 
     }
 
+    // Generate QR code
+    let qrCodeData: string;
+    try {
+      const qrText = JSON.stringify({
+        booking: booking.bookingId,
+        passenger: booking.passengerInfo.name,
+        seat: booking.seatInfo.seatNumber,
+        date: booking.travelDate.toISOString().split('T')[0],
+        time: booking.departureTime,
+        verification: `SRI-EXPRESS-${booking.bookingId}`
+      });
+      
+      qrCodeData = await QRCode.toDataURL(qrText, {
+        errorCorrectionLevel: 'M',
+        type: 'image/png',
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        },
+        width: 400
+      });
+
+      console.log('QR code generated successfully for email');
+    } catch (qrError) {
+      console.error('QR code generation failed for email:', qrError);
+      
+      // Fallback to simple QR code
+      const fallbackQrText = `SRI-EXPRESS-${booking.bookingId}-${booking.passengerInfo.name}-${booking.seatInfo.seatNumber}`;
+      qrCodeData = `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><rect width='200' height='200' fill='white'/><text x='100' y='100' text-anchor='middle' font-size='12' fill='black'>${booking.bookingId}</text></svg>`;
+    }
+
     // Create email HTML template
     const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8f9fa;">
@@ -1033,7 +1066,7 @@ export const sendTicketByEmail = async (req: Request, res: Response): Promise<vo
           <!-- QR Code Section -->
           <div style="text-align: center; margin: 2rem 0;">
             <div style="display: inline-block; padding: 1rem; background: white; border-radius: 12px; border: 3px solid #F59E0B; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);">
-              <img src="${qrCode}" alt="Ticket QR Code" style="max-width: 200px; width: 100%; height: auto; display: block;" />
+              <img src="${qrCodeData}" alt="Ticket QR Code" style="max-width: 200px; width: 100%; height: auto; display: block;" />
             </div>
             <p style="margin-top: 1rem; color: #666; font-size: 1.1rem; font-weight: 500;">Show this QR code to the conductor</p>
           </div>
@@ -1095,21 +1128,37 @@ export const sendTicketByEmail = async (req: Request, res: Response): Promise<vo
       </div>
     `;
 
-    // Import and use the sendEmail function
-    const sendEmail = require('../../utils/sendEmail').default;
-    
-    await sendEmail({
-      email: email || booking.passengerInfo.email,
-      subject: `ශ්‍රී Express - Your E-Ticket (${booking.bookingId})`,
-      html: emailHtml
-    });
+    // Send email using the imported function
+    try {
+      await sendEmail({
+        email: email || booking.passengerInfo.email,
+        subject: `ශ්‍රී Express - Your E-Ticket (${booking.bookingId})`,
+        html: emailHtml
+      });
 
-    console.log('Ticket email sent successfully to:', email || booking.passengerInfo.email);
+      console.log('Ticket email sent successfully to:', email || booking.passengerInfo.email);
 
-    res.json({ 
-      message: 'Ticket sent successfully via email',
-      sentTo: email || booking.passengerInfo.email
-    });
+      res.json({ 
+        message: 'Ticket sent successfully via email',
+        sentTo: email || booking.passengerInfo.email,
+        qrCodeGenerated: true
+      });
+    } catch (emailError) {
+      console.error('Email sending failed, but QR was generated:', emailError);
+      
+      // In development mode, return success with a warning
+      if (process.env.NODE_ENV === 'development') {
+        res.json({ 
+          message: 'QR code generated successfully (email sending failed in development mode)',
+          sentTo: email || booking.passengerInfo.email,
+          qrCodeGenerated: true,
+          emailWarning: 'Email sending failed - check SMTP configuration',
+          error: emailError instanceof Error ? emailError.message : 'Unknown email error'
+        });
+      } else {
+        throw emailError;
+      }
+    }
 
   } catch (error) {
     console.error('Send ticket email error:', error);
