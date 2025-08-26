@@ -19,5 +19,6 @@ router.get('/:id', bookingController_1.getBookingById);
 router.put('/:id', bookingController_1.updateBooking);
 router.put('/:id/cancel', bookingController_1.cancelBooking);
 router.post('/:id/qr', bookingController_1.generateQRCode);
+router.post('/:id/email-ticket', bookingController_1.sendTicketByEmail);
 router.post('/:id/checkin', bookingController_1.checkInPassenger);
 exports.default = router;
