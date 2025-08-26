@@ -1,4 +1,4 @@
-// src/models/Route.ts - COMPLETELY FIXED VERSION
+// src/models/Route.ts - Updated with Approval Workflow
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IRoute extends Document {
@@ -28,7 +28,7 @@ export interface IRoute extends Document {
     frequency: number;     // minutes between departures
     daysOfWeek: string[];  // ["monday", "tuesday", ...]
     isActive: boolean;
-    toObject(): any; // Add this method to the interface
+    toObject(): any;
   }];
   operatorInfo: {
     fleetId: mongoose.Types.ObjectId;
@@ -38,7 +38,7 @@ export interface IRoute extends Document {
   vehicleInfo: {
     type: 'bus' | 'train';
     capacity: number;
-    amenities: string[]; // ["AC", "WiFi", "Charging"]
+    amenities: string[];
   };
   pricing: {
     basePrice: number;
@@ -48,6 +48,16 @@ export interface IRoute extends Document {
       percentage: number;
     }];
   };
+  
+  // Approval Workflow Fields
+  approvalStatus: 'pending' | 'approved' | 'rejected';
+  submittedAt: Date;
+  reviewedAt?: Date;
+  reviewedBy?: mongoose.Types.ObjectId;
+  rejectionReason?: string;
+  adminNotes?: string;
+  
+  // Operational Status (separate from approval)
   status: 'active' | 'inactive' | 'maintenance';
   avgRating: number;
   totalReviews: number;
@@ -55,18 +65,24 @@ export interface IRoute extends Document {
   createdAt: Date;
   updatedAt: Date;
   
-  // Add method signatures to interface
+  // Methods
   calculatePrice(passengerType?: string): number;
   getNextDepartures(limit?: number): any[];
+  approve(adminId: mongoose.Types.ObjectId, notes?: string): Promise<IRoute>;
+  reject(adminId: mongoose.Types.ObjectId, reason: string): Promise<IRoute>;
+  resubmit(): Promise<IRoute>;
 }
 
 const RouteSchema = new Schema<IRoute>(
   {
-    routeId: {
-      type: String,
-      required: true,
-      unique: true,
-    },
+   routeId: {
+  type: String,
+  required: false,  // Remove required since it's auto-generated
+  unique: true,
+  default: function() {
+    return `RT${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  }
+},
     name: {
       type: String,
       required: true,
@@ -185,6 +201,32 @@ const RouteSchema = new Schema<IRoute>(
         }
       }]
     },
+
+    // Approval Workflow Fields
+    approvalStatus: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending'
+    },
+    submittedAt: {
+      type: Date,
+      default: Date.now
+    },
+    reviewedAt: {
+      type: Date
+    },
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    rejectionReason: {
+      type: String
+    },
+    adminNotes: {
+      type: String
+    },
+
+    // Operational Status
     status: {
       type: String,
       enum: ['active', 'inactive', 'maintenance'],
@@ -211,28 +253,22 @@ const RouteSchema = new Schema<IRoute>(
   }
 );
 
-// Indexes for better query performance
+// Indexes
 RouteSchema.index({ routeId: 1 });
-RouteSchema.index({ 'startLocation.name': 1 });
-RouteSchema.index({ 'endLocation.name': 1 });
+RouteSchema.index({ approvalStatus: 1 });
+RouteSchema.index({ 'operatorInfo.fleetId': 1 });
 RouteSchema.index({ status: 1 });
 RouteSchema.index({ isActive: 1 });
-RouteSchema.index({ 'operatorInfo.fleetId': 1 });
-RouteSchema.index({ 'vehicleInfo.type': 1 });
+RouteSchema.index({ submittedAt: -1 });
+RouteSchema.index({ 'startLocation.name': 1 });
+RouteSchema.index({ 'endLocation.name': 1 });
 
-// Generate routeId before saving
-RouteSchema.pre('save', function(next) {
-  if (!this.routeId) {
-    this.routeId = `RT${Date.now()}${Math.floor(Math.random() * 1000)}`;
-  }
-  next();
-});
+
 
 // Calculate price method
 RouteSchema.methods.calculatePrice = function(passengerType: string = 'regular') {
   let totalPrice = this.pricing.basePrice + (this.distance * this.pricing.pricePerKm);
   
-  // Apply discounts
   const discount = this.pricing.discounts.find((d: any) => d.type === passengerType);
   if (discount) {
     totalPrice = totalPrice * (1 - discount.percentage / 100);
@@ -241,12 +277,11 @@ RouteSchema.methods.calculatePrice = function(passengerType: string = 'regular')
   return Math.round(totalPrice);
 };
 
-// Get next departures method - FIXED THE ISSUES! ⭐
+// Get next departures method
 RouteSchema.methods.getNextDepartures = function(limit: number = 5) {
   const now = new Date();
-  // FIX: Get day name properly
-  const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase(); // ✅ FIXED
-  const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
+  const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+  const currentTime = now.toTimeString().slice(0, 5);
   
   return this.schedules
     .filter((schedule: any) => 
@@ -255,6 +290,35 @@ RouteSchema.methods.getNextDepartures = function(limit: number = 5) {
       schedule.departureTime > currentTime
     )
     .slice(0, limit);
+};
+
+// Approval workflow methods
+RouteSchema.methods.approve = async function(adminId: mongoose.Types.ObjectId, notes?: string) {
+  this.approvalStatus = 'approved';
+  this.reviewedAt = new Date();
+  this.reviewedBy = adminId;
+  this.rejectionReason = undefined;
+  if (notes) this.adminNotes = notes;
+  return await this.save();
+};
+
+RouteSchema.methods.reject = async function(adminId: mongoose.Types.ObjectId, reason: string) {
+  this.approvalStatus = 'rejected';
+  this.reviewedAt = new Date();
+  this.reviewedBy = adminId;
+  this.rejectionReason = reason;
+  this.status = 'inactive'; // Rejected routes are inactive
+  return await this.save();
+};
+
+RouteSchema.methods.resubmit = async function() {
+  this.approvalStatus = 'pending';
+  this.submittedAt = new Date();
+  this.reviewedAt = undefined;
+  this.reviewedBy = undefined;
+  this.rejectionReason = undefined;
+  this.status = 'active'; // Reset to active when resubmitting
+  return await this.save();
 };
 
 const Route = mongoose.model<IRoute>('Route', RouteSchema);

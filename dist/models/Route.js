@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-// src/models/Route.ts - COMPLETELY FIXED VERSION
+// src/models/Route.ts - Updated with Approval Workflow
 const mongoose_1 = __importStar(require("mongoose"));
 const RouteSchema = new mongoose_1.Schema({
     routeId: {
@@ -159,6 +159,30 @@ const RouteSchema = new mongoose_1.Schema({
                 }
             }]
     },
+    // Approval Workflow Fields
+    approvalStatus: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending'
+    },
+    submittedAt: {
+        type: Date,
+        default: Date.now
+    },
+    reviewedAt: {
+        type: Date
+    },
+    reviewedBy: {
+        type: mongoose_1.default.Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    rejectionReason: {
+        type: String
+    },
+    adminNotes: {
+        type: String
+    },
+    // Operational Status
     status: {
         type: String,
         enum: ['active', 'inactive', 'maintenance'],
@@ -182,14 +206,15 @@ const RouteSchema = new mongoose_1.Schema({
 }, {
     timestamps: true,
 });
-// Indexes for better query performance
+// Indexes
 RouteSchema.index({ routeId: 1 });
-RouteSchema.index({ 'startLocation.name': 1 });
-RouteSchema.index({ 'endLocation.name': 1 });
+RouteSchema.index({ approvalStatus: 1 });
+RouteSchema.index({ 'operatorInfo.fleetId': 1 });
 RouteSchema.index({ status: 1 });
 RouteSchema.index({ isActive: 1 });
-RouteSchema.index({ 'operatorInfo.fleetId': 1 });
-RouteSchema.index({ 'vehicleInfo.type': 1 });
+RouteSchema.index({ submittedAt: -1 });
+RouteSchema.index({ 'startLocation.name': 1 });
+RouteSchema.index({ 'endLocation.name': 1 });
 // Generate routeId before saving
 RouteSchema.pre('save', function (next) {
     if (!this.routeId) {
@@ -200,24 +225,49 @@ RouteSchema.pre('save', function (next) {
 // Calculate price method
 RouteSchema.methods.calculatePrice = function (passengerType = 'regular') {
     let totalPrice = this.pricing.basePrice + (this.distance * this.pricing.pricePerKm);
-    // Apply discounts
     const discount = this.pricing.discounts.find((d) => d.type === passengerType);
     if (discount) {
         totalPrice = totalPrice * (1 - discount.percentage / 100);
     }
     return Math.round(totalPrice);
 };
-// Get next departures method - FIXED THE ISSUES! ⭐
+// Get next departures method
 RouteSchema.methods.getNextDepartures = function (limit = 5) {
     const now = new Date();
-    // FIX: Get day name properly
-    const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase(); // ✅ FIXED
-    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
+    const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    const currentTime = now.toTimeString().slice(0, 5);
     return this.schedules
         .filter((schedule) => schedule.isActive &&
         schedule.daysOfWeek.includes(currentDay) &&
         schedule.departureTime > currentTime)
         .slice(0, limit);
+};
+// Approval workflow methods
+RouteSchema.methods.approve = async function (adminId, notes) {
+    this.approvalStatus = 'approved';
+    this.reviewedAt = new Date();
+    this.reviewedBy = adminId;
+    this.rejectionReason = undefined;
+    if (notes)
+        this.adminNotes = notes;
+    return await this.save();
+};
+RouteSchema.methods.reject = async function (adminId, reason) {
+    this.approvalStatus = 'rejected';
+    this.reviewedAt = new Date();
+    this.reviewedBy = adminId;
+    this.rejectionReason = reason;
+    this.status = 'inactive'; // Rejected routes are inactive
+    return await this.save();
+};
+RouteSchema.methods.resubmit = async function () {
+    this.approvalStatus = 'pending';
+    this.submittedAt = new Date();
+    this.reviewedAt = undefined;
+    this.reviewedBy = undefined;
+    this.rejectionReason = undefined;
+    this.status = 'active'; // Reset to active when resubmitting
+    return await this.save();
 };
 const Route = mongoose_1.default.model('Route', RouteSchema);
 exports.default = Route;
