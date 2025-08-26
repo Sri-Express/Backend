@@ -11,7 +11,7 @@ interface EmailOptions {
 }
 
 // Brevo Transporter Configuration
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   host: 'smtp-relay.brevo.com',
   port: 587,
   auth: {

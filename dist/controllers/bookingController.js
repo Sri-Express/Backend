@@ -42,7 +42,7 @@ const Booking_1 = __importDefault(require("../models/Booking"));
 const Route_1 = __importDefault(require("../models/Route"));
 const Payment_1 = __importDefault(require("../models/Payment"));
 const QRCode = __importStar(require("qrcode"));
-const sendEmail_1 = __importDefault(require("../utils/sendEmail"));
+const sendEmail_1 = require("../utils/sendEmail");
 // Payment method mapping function
 const mapPaymentMethod = (frontendMethod) => {
     const mapping = {
@@ -921,7 +921,6 @@ exports.generateQRCode = generateQRCode;
 // @route   POST /api/bookings/:id/email-ticket
 // @access  Private
 const sendTicketByEmail = async (req, res) => {
-    var _a;
     try {
         if (!req.user) {
             res.status(401).json({ message: 'Not authorized' });
@@ -946,126 +945,37 @@ const sendTicketByEmail = async (req, res) => {
             res.status(400).json({ message: 'Can only email confirmed bookings' });
             return;
         }
-        // Generate QR code
-        let qrCodeData;
+        // Generate QR code text
+        const qrText = JSON.stringify({
+            booking: booking.bookingId,
+            passenger: booking.passengerInfo.name,
+            seat: booking.seatInfo.seatNumber,
+            date: booking.travelDate.toISOString().split('T')[0],
+            time: booking.departureTime,
+            verification: `SRI-EXPRESS-${booking.bookingId}`
+        });
+        // Use QR Server service instead of data URL (works in all email clients)
+        const qrCodeImageURL = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&format=png&margin=10&data=${encodeURIComponent(qrText)}`;
+        console.log('QR code URL generated for email:', qrCodeImageURL);
+        // Use the sendTicketEmail function from sendEmail.ts
         try {
-            const qrText = JSON.stringify({
-                booking: booking.bookingId,
-                passenger: booking.passengerInfo.name,
-                seat: booking.seatInfo.seatNumber,
-                date: booking.travelDate.toISOString().split('T')[0],
-                time: booking.departureTime,
-                verification: `SRI-EXPRESS-${booking.bookingId}`
-            });
-            qrCodeData = await QRCode.toDataURL(qrText, {
-                errorCorrectionLevel: 'M',
-                type: 'image/png',
-                margin: 1,
-                color: {
-                    dark: '#000000',
-                    light: '#FFFFFF'
-                },
-                width: 400
-            });
-            console.log('QR code generated successfully for email');
-        }
-        catch (qrError) {
-            console.error('QR code generation failed for email:', qrError);
-            // Fallback to simple QR code
-            const fallbackQrText = `SRI-EXPRESS-${booking.bookingId}-${booking.passengerInfo.name}-${booking.seatInfo.seatNumber}`;
-            qrCodeData = `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><rect width='200' height='200' fill='white'/><text x='100' y='100' text-anchor='middle' font-size='12' fill='black'>${booking.bookingId}</text></svg>`;
-        }
-        // Create email HTML template
-        const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8f9fa;">
-        <!-- Header -->
-        <div style="background: linear-gradient(135deg, #F59E0B, #EF4444); color: white; padding: 2rem; text-align: center; border-radius: 12px 12px 0 0;">
-          <h1 style="margin: 0; font-size: 2rem; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">ශ්‍රී Express</h1>
-          <p style="margin: 0.5rem 0 0 0; opacity: 0.9; font-size: 1.1rem;">Your Electronic Ticket</p>
-        </div>
-        
-        <!-- Content -->
-        <div style="background: white; padding: 2rem;">
-          <!-- QR Code Section -->
-          <div style="text-align: center; margin: 2rem 0;">
-            <div style="display: inline-block; padding: 1rem; background: white; border-radius: 12px; border: 3px solid #F59E0B; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);">
-              <img src="${qrCodeData}" alt="Ticket QR Code" style="max-width: 200px; width: 100%; height: auto; display: block;" />
-            </div>
-            <p style="margin-top: 1rem; color: #666; font-size: 1.1rem; font-weight: 500;">Show this QR code to the conductor</p>
-          </div>
-          
-          <!-- Booking Details -->
-          <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin: 1.5rem 0;">
-            <h2 style="color: #333; margin: 0 0 1rem 0; font-size: 1.3rem; border-bottom: 2px solid #F59E0B; padding-bottom: 0.5rem;">Booking Details</h2>
-            
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr>
-                <td style="padding: 0.5rem 0; border-bottom: 1px solid #eee; font-weight: bold; color: #666;">Booking ID:</td>
-                <td style="padding: 0.5rem 0; border-bottom: 1px solid #eee; color: #333;">${booking.bookingId}</td>
-              </tr>
-              <tr>
-                <td style="padding: 0.5rem 0; border-bottom: 1px solid #eee; font-weight: bold; color: #666;">Passenger:</td>
-                <td style="padding: 0.5rem 0; border-bottom: 1px solid #eee; color: #333;">${booking.passengerInfo.name}</td>
-              </tr>
-              <tr>
-                <td style="padding: 0.5rem 0; border-bottom: 1px solid #eee; font-weight: bold; color: #666;">Route:</td>
-                <td style="padding: 0.5rem 0; border-bottom: 1px solid #eee; color: #333;">${((_a = booking.routeId) === null || _a === void 0 ? void 0 : _a.name) || 'N/A'}</td>
-              </tr>
-              <tr>
-                <td style="padding: 0.5rem 0; border-bottom: 1px solid #eee; font-weight: bold; color: #666;">Date & Time:</td>
-                <td style="padding: 0.5rem 0; border-bottom: 1px solid #eee; color: #333;">${new Date(booking.travelDate).toLocaleDateString()} at ${booking.departureTime}</td>
-              </tr>
-              <tr>
-                <td style="padding: 0.5rem 0; border-bottom: 1px solid #eee; font-weight: bold; color: #666;">Seat:</td>
-                <td style="padding: 0.5rem 0; border-bottom: 1px solid #eee; color: #333;">${booking.seatInfo.seatNumber} (${booking.seatInfo.seatType})</td>
-              </tr>
-              <tr>
-                <td style="padding: 0.5rem 0; border-bottom: 1px solid #eee; font-weight: bold; color: #666;">Amount Paid:</td>
-                <td style="padding: 0.5rem 0; border-bottom: 1px solid #eee; color: #10B981; font-weight: bold;">Rs. ${booking.pricing.totalAmount.toLocaleString()}</td>
-              </tr>
-              <tr>
-                <td style="padding: 0.5rem 0; font-weight: bold; color: #666;">Status:</td>
-                <td style="padding: 0.5rem 0; color: #10B981; font-weight: bold;">CONFIRMED</td>
-              </tr>
-            </table>
-          </div>
-          
-          <!-- Important Instructions -->
-          <div style="background: #FEF3C7; border: 1px solid #F59E0B; border-left: 4px solid #F59E0B; border-radius: 8px; padding: 1.5rem; margin: 1.5rem 0;">
-            <h3 style="color: #92400E; margin: 0 0 1rem 0; font-size: 1.1rem;">Important Instructions</h3>
-            <ul style="color: #92400E; margin: 0; padding-left: 1.2rem; line-height: 1.6;">
-              <li>Present this QR code for verification before boarding</li>
-              <li>Arrive at the departure point 15 minutes early</li>
-              <li>Carry valid photo ID matching the passenger name</li>
-              <li>Contact support at +94 11 123 4567 for assistance</li>
-              <li>This ticket is non-transferable and valid only for the specified journey</li>
-            </ul>
-          </div>
-          
-          <!-- Footer -->
-          <div style="text-align: center; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #eee;">
-            <p style="color: #666; font-size: 0.9rem; margin: 0;">Thank you for choosing ශ්‍රී Express!</p>
-            <p style="color: #999; font-size: 0.8rem; margin: 0.5rem 0 0 0;">This is an automated email. Please do not reply.</p>
-          </div>
-        </div>
-      </div>
-    `;
-        // Send email using the imported function
-        try {
-            await (0, sendEmail_1.default)({
-                email: email || booking.passengerInfo.email,
-                subject: `ශ්‍රී Express - Your E-Ticket (${booking.bookingId})`,
-                html: emailHtml
+            await (0, sendEmail_1.sendTicketEmail)(email || booking.passengerInfo.email, booking.passengerInfo.name, booking.bookingId, qrCodeImageURL, // Pass the HTTP URL instead of data URL
+            {
+                routeId: booking.routeId,
+                travelDate: booking.travelDate,
+                departureTime: booking.departureTime,
+                seatInfo: booking.seatInfo
             });
             console.log('Ticket email sent successfully to:', email || booking.passengerInfo.email);
             res.json({
                 message: 'Ticket sent successfully via email',
                 sentTo: email || booking.passengerInfo.email,
-                qrCodeGenerated: true
+                qrCodeGenerated: true,
+                qrService: 'api.qrserver.com'
             });
         }
         catch (emailError) {
-            console.error('Email sending failed, but QR was generated:', emailError);
+            console.error('Email sending failed:', emailError);
             // In development mode, return success with a warning
             if (process.env.NODE_ENV === 'development') {
                 res.json({
