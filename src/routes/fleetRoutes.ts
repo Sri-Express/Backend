@@ -1,4 +1,4 @@
-// src/routes/fleetRoutes.ts - Fleet Routes with Route Assignment Management (FIXED VERSION)
+// src/routes/fleetRoutes.ts - Fleet Routes FIXED (Route Assignment Only)
 import express from 'express';
 import { protect } from '../middleware/authMiddleware';
 import { requireFleetManager } from '../middleware/fleetMiddleware';
@@ -11,20 +11,13 @@ import {
   updateFleetSettings,
   getFleetAnalytics,
   getFleetNotifications,
-  markNotificationRead
-} from '../controllers/fleetController';
-
-// FIXED: Vehicle management controllers from fleetVehicleController
-import {
+  markNotificationRead,
   getFleetVehicles,
   addVehicle,
   updateVehicle,
   deleteVehicle,
-  getVehicleById,
-  getApprovedVehicles,
-  getVehicleDashboard,
-  updateVehicleLocation
-} from '../controllers/fleetVehicleController';
+  getVehicleDetails
+} from '../controllers/fleetController';
 
 // Route assignment controllers (existing - these are correct)
 import {
@@ -55,19 +48,17 @@ router.get('/notifications', getFleetNotifications);
 router.put('/notifications/:id/read', markNotificationRead);
 
 // ============================
-// VEHICLE MANAGEMENT (UPDATED)
+// VEHICLE MANAGEMENT
 // ============================
 router.get('/vehicles', getFleetVehicles);
-router.get('/vehicles/dashboard', getVehicleDashboard);
 router.post('/vehicles', addVehicle);
-router.get('/vehicles/approved', getApprovedVehicles);
-router.get('/vehicles/:id', getVehicleById);
+router.get('/vehicles/:id', getVehicleDetails);
 router.put('/vehicles/:id', updateVehicle);
-router.put('/vehicles/:id/location', updateVehicleLocation);
 router.delete('/vehicles/:id', deleteVehicle);
 
 // ============================
-// ROUTE ASSIGNMENT MANAGEMENT
+// ROUTE ASSIGNMENT MANAGEMENT ONLY
+// (Fleet managers can only assign vehicles to admin-created routes)
 // ============================
 
 // Get available routes for fleet assignment
@@ -224,11 +215,10 @@ router.post('/emergency/broadcast', async (req, res) => {
 router.get('/test/route-assignments', async (req, res) => {
   try {
     res.json({
-      message: 'Fleet route assignment endpoints are working!',
+      message: 'Fleet route assignment endpoints are working! (ROUTE CREATION REMOVED)',
       timestamp: new Date().toISOString(),
       availableEndpoints: [
         'GET /api/fleet/routes/available - Get available routes for assignment',
-        'GET /api/fleet/vehicles/approved - Get approved vehicles',
         'GET /api/fleet/route-assignments - Get current assignments',
         'GET /api/fleet/route-assignments/stats - Get assignment statistics',
         'POST /api/fleet/route-assignments - Assign vehicles to routes',
@@ -236,15 +226,20 @@ router.get('/test/route-assignments', async (req, res) => {
         'PUT /api/fleet/route-assignments/:assignmentId/schedules - Update schedules',
         'GET /api/fleet/route-assignments/:assignmentId/performance - Get performance'
       ],
-      newFeatures: [
-        '✅ Route discovery and assignment',
-        '✅ Multi-vehicle route assignment',
-        '✅ Assignment performance tracking',
-        '✅ Schedule management',
-        '✅ Vehicle-route compatibility checking',
-        '✅ Real-time assignment statistics'
+      workflow: [
+        '1. Admin creates routes via admin panel',
+        '2. Fleet manager registers fleet and adds vehicles',
+        '3. Admin approves fleet and vehicles',
+        '4. Fleet manager assigns approved vehicles to admin-created routes',
+        '5. Fleet manager manages schedules and monitors performance'
       ],
-      totalEndpoints: '35+'
+      removedEndpoints: [
+        '❌ POST /api/fleet/routes - Route creation (moved to admin only)',
+        '❌ PUT /api/fleet/routes/:id - Route updates (admin only)',
+        '❌ DELETE /api/fleet/routes/:id - Route deletion (admin only)',
+        '❌ GET /api/fleet/routes/:id - Individual route management (admin only)'
+      ],
+      totalEndpoints: '30+'
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: (error as Error).message });
@@ -253,36 +248,36 @@ router.get('/test/route-assignments', async (req, res) => {
 
 router.get('/docs', (req, res) => {
   res.json({
-    message: 'Sri Express Fleet Management API Documentation',
-    version: '2.6.0',
-    status: 'Vehicle Approval System + Route Assignment Fully Integrated!',
+    message: 'Sri Express Fleet Management API Documentation - FIXED VERSION',
+    version: '3.0.0',
+    status: 'Fleet Route Assignment Only - Admin Creates Routes',
     endpoints: {
       dashboard: 'Fleet dashboard and profile management (7 endpoints)',
-      vehicles: 'Vehicle management with approval system (8 endpoints)',
-      routes: 'Route assignment and management (8 endpoints)',
+      vehicles: 'Vehicle management with approval system (5 endpoints)',
+      routeAssignment: 'Route assignment management (7 endpoints)', 
       operations: 'Trip and schedule operations (2 endpoints)', 
       reports: 'Revenue and performance reporting (2 endpoints)',
       compliance: 'Compliance and document management (2 endpoints)',
       emergency: 'Emergency alerts and safety (2 endpoints)',
       testing: 'Test and debug endpoints (2 endpoints)'
     },
-    totalEndpoints: '33+',
-    keyFeatures: [
-      'Complete vehicle fleet management with admin approval',
-      'Route assignment and scheduling',
-      'Real-time GPS tracking integration',
-      'Performance analytics and reporting',
-      'Compliance and safety monitoring',
-      'Emergency response system',
-      'Multi-route vehicle operations'
-    ],
-    businessLogic: {
-      vehicleWorkflow: 'Fleet adds vehicle → Admin approves → Fleet assigns to routes',
-      routeCompatibility: 'Bus vehicles only (configurable)',
-      multiRouteSupport: 'One vehicle can serve multiple routes',
-      approvalRequired: 'All vehicles need admin approval before route assignment',
-      performanceTracking: 'Revenue, ratings, completion rates'
-    }
+    totalEndpoints: '29',
+    correctedWorkflow: {
+      step1: 'Admin creates routes via admin panel (/sysadmin/routes)',
+      step2: 'Fleet manager applies for fleet registration (/fleet/profile)',
+      step3: 'Admin approves fleet (/sysadmin/fleet)',
+      step4: 'Fleet manager adds vehicles (/fleet/vehicles/add)',
+      step5: 'Admin approves vehicles (/sysadmin/vehicles)',
+      step6: 'Fleet manager assigns vehicles to routes (/fleet/routes/available)',
+      step7: 'Fleet manager manages assignments and schedules'
+    },
+    keyChanges: [
+      '✅ Removed fleet route creation functionality',
+      '✅ Standardized on Device model for vehicles',
+      '✅ Simplified workflow: Admin creates routes, Fleet assigns vehicles',
+      '✅ Clear separation of admin and fleet responsibilities',
+      '✅ Maintained route assignment and performance tracking'
+    ]
   });
 });
 
