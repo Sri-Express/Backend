@@ -1,4 +1,4 @@
-// src/controllers/fleetController.ts - Fleet Operator Portal
+// src/controllers/fleetController.ts - Fleet Operator Portal (UPDATED WITH MISSING FUNCTIONS)
 import { Request, Response } from 'express';
 import Fleet from '../models/Fleet';
 import Route from '../models/Route';
@@ -258,6 +258,207 @@ export const updateFleetProfile = async (req: Request, res: Response): Promise<v
       return;
     }
 
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+};
+
+// NEW: Get fleet settings
+// @desc    Get fleet settings
+// @route   GET /api/fleet/settings
+// @access  Private (Fleet Manager)
+export const getFleetSettings = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const fleet = await Fleet.findOne({ 
+      email: req.user?.email,
+      isActive: true 
+    });
+
+    if (!fleet) {
+      res.status(404).json({ message: 'Fleet not found' });
+      return;
+    }
+
+    // Return fleet settings
+    const settings = {
+      notifications: {
+        emailAlerts: true,
+        smsAlerts: false,
+        emergencyAlerts: true,
+        maintenanceReminders: true,
+        routeUpdates: true
+      },
+      privacy: {
+        shareLocation: true,
+        sharePerformanceData: false,
+        allowAnalytics: true
+      },
+      operational: {
+        autoAcceptBookings: false,
+        emergencyContactNumber: fleet.phone || '',
+        operatingHours: {
+          start: '06:00',
+          end: '22:00'
+        },
+        maintenanceSchedule: 'weekly'
+      },
+      billing: {
+        paymentMethod: 'bank_transfer',
+        invoiceFrequency: 'monthly',
+        autoPayEnabled: false
+      }
+    };
+
+    res.json({ settings });
+  } catch (error) {
+    console.error('Get fleet settings error:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+};
+
+// NEW: Update fleet settings
+// @desc    Update fleet settings
+// @route   PUT /api/fleet/settings
+// @access  Private (Fleet Manager)
+export const updateFleetSettings = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { notifications, privacy, operational, billing } = req.body;
+
+    const fleet = await Fleet.findOne({ 
+      email: req.user?.email,
+      isActive: true 
+    });
+
+    if (!fleet) {
+      res.status(404).json({ message: 'Fleet not found' });
+      return;
+    }
+
+    // Update settings (store in operationalInfo or create a dedicated settings field)
+    if (!fleet.operationalInfo) {
+      fleet.operationalInfo = {
+        yearsInOperation: 0,
+        averageFleetAge: 0,
+        maintenanceSchedule: 'monthly'
+      };
+    }
+    
+    if (notifications) fleet.operationalInfo.notifications = notifications;
+    if (privacy) fleet.operationalInfo.privacy = privacy;
+    if (operational) fleet.operationalInfo.operational = operational;
+    if (billing) fleet.operationalInfo.billing = billing;
+
+    await fleet.save();
+
+    res.json({
+      message: 'Fleet settings updated successfully',
+      settings: {
+        notifications: fleet.operationalInfo?.notifications || {},
+        privacy: fleet.operationalInfo?.privacy || {},
+        operational: fleet.operationalInfo?.operational || {},
+        billing: fleet.operationalInfo?.billing || {}
+      }
+    });
+  } catch (error) {
+    console.error('Update fleet settings error:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+};
+
+// NEW: Get fleet notifications
+// @desc    Get fleet notifications
+// @route   GET /api/fleet/notifications
+// @access  Private (Fleet Manager)
+export const getFleetNotifications = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { unreadOnly = false, limit = 50 } = req.query;
+
+    // Mock notifications - in production, you'd have a Notification model
+    const notifications = [
+      {
+        _id: '1',
+        type: 'route_approved',
+        title: 'Route Application Approved',
+        message: 'Your route application for "Padukka to Colombo" has been approved',
+        read: false,
+        createdAt: new Date(Date.now() - 3600000), // 1 hour ago
+        priority: 'high',
+        category: 'route'
+      },
+      {
+        _id: '2',
+        type: 'vehicle_maintenance',
+        title: 'Vehicle Maintenance Due',
+        message: 'Vehicle BUS-001 is due for scheduled maintenance',
+        read: unreadOnly ? false : true,
+        createdAt: new Date(Date.now() - 86400000), // 1 day ago
+        priority: 'medium',
+        category: 'vehicle'
+      },
+      {
+        _id: '3',
+        type: 'system_update',
+        title: 'System Update Available',
+        message: 'New features are available in the fleet management system',
+        read: unreadOnly ? false : true,
+        createdAt: new Date(Date.now() - 172800000), // 2 days ago
+        priority: 'low',
+        category: 'system'
+      }
+    ];
+
+    const filteredNotifications = unreadOnly === 'true' 
+      ? notifications.filter(n => !n.read)
+      : notifications;
+
+    const limitedNotifications = filteredNotifications.slice(0, parseInt(limit as string));
+
+    const stats = {
+      total: notifications.length,
+      unread: notifications.filter(n => !n.read).length,
+      high: notifications.filter(n => n.priority === 'high').length,
+      medium: notifications.filter(n => n.priority === 'medium').length,
+      low: notifications.filter(n => n.priority === 'low').length
+    };
+
+    res.json({
+      notifications: limitedNotifications,
+      stats
+    });
+  } catch (error) {
+    console.error('Get fleet notifications error:', error);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+};
+
+// NEW: Mark notification as read
+// @desc    Mark notification as read
+// @route   PUT /api/fleet/notifications/:id/read
+// @access  Private (Fleet Manager)
+export const markNotificationRead = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    // In production, you'd update the actual notification in database
+    // For now, just return success
+    res.json({
+      message: 'Notification marked as read',
+      notificationId: id,
+      readAt: new Date()
+    });
+  } catch (error) {
+    console.error('Mark notification read error:', error);
     res.status(500).json({ 
       message: 'Server error', 
       error: error instanceof Error ? error.message : 'Unknown error' 

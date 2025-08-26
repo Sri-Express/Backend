@@ -3,10 +3,134 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRoutesByFleet = exports.getPendingRoutes = exports.getRouteStats = exports.deleteRoute = exports.updateRoute = exports.rejectRoute = exports.approveRoute = exports.getRouteById = exports.getAllRoutes = void 0;
+exports.getRoutesByFleet = exports.getPendingRoutes = exports.getRouteStats = exports.deleteRoute = exports.updateRoute = exports.rejectRoute = exports.approveRoute = exports.getRouteById = exports.getAllRoutes = exports.createRoute = void 0;
 const Route_1 = __importDefault(require("../models/Route"));
 const Fleet_1 = __importDefault(require("../models/Fleet"));
 const mongoose_1 = __importDefault(require("mongoose"));
+// @desc    Create new route (Admin only)
+// @route   POST /api/admin/routes
+// @access  Private (System Admin)
+const createRoute = async (req, res) => {
+    var _a;
+    try {
+        const { name, startLocation, endLocation, waypoints = [], distance, estimatedDuration, schedules, vehicleInfo, pricing } = req.body;
+        // Validate required fields
+        if (!name || !startLocation || !endLocation || !distance || !estimatedDuration || !vehicleInfo || !pricing) {
+            res.status(400).json({
+                message: 'Missing required fields: name, startLocation, endLocation, distance, estimatedDuration, vehicleInfo, pricing'
+            });
+            return;
+        }
+        // Validate coordinates format
+        const validateCoordinates = (coords) => {
+            return Array.isArray(coords) && coords.length === 2 &&
+                typeof coords[0] === 'number' && typeof coords[1] === 'number';
+        };
+        if (!validateCoordinates(startLocation.coordinates) || !validateCoordinates(endLocation.coordinates)) {
+            res.status(400).json({
+                message: 'Invalid coordinates format. Expected [longitude, latitude]'
+            });
+            return;
+        }
+        // Validate waypoints coordinates if provided
+        if (waypoints.length > 0) {
+            for (const waypoint of waypoints) {
+                if (!validateCoordinates(waypoint.coordinates)) {
+                    res.status(400).json({
+                        message: `Invalid waypoint coordinates for ${waypoint.name}. Expected [longitude, latitude]`
+                    });
+                    return;
+                }
+            }
+        }
+        // Create route data
+        const routeData = {
+            name: name.trim(),
+            startLocation: {
+                name: startLocation.name.trim(),
+                coordinates: startLocation.coordinates,
+                address: startLocation.address.trim()
+            },
+            endLocation: {
+                name: endLocation.name.trim(),
+                coordinates: endLocation.coordinates,
+                address: endLocation.address.trim()
+            },
+            waypoints: waypoints.map((wp, index) => ({
+                name: wp.name.trim(),
+                coordinates: wp.coordinates,
+                estimatedTime: wp.estimatedTime || (index + 1) * 15, // Default 15 min intervals
+                order: wp.order || index + 1
+            })),
+            distance: parseFloat(distance),
+            estimatedDuration: parseInt(estimatedDuration),
+            schedules: schedules || [{
+                    departureTime: "06:00",
+                    arrivalTime: "08:00",
+                    frequency: 30,
+                    daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+                    isActive: true
+                }],
+            operatorInfo: {
+                fleetId: new mongoose_1.default.Types.ObjectId(), // Temporary system fleet ID
+                companyName: "SRI EXPRESS SYSTEM",
+                contactNumber: "+94112345678"
+            },
+            vehicleInfo: {
+                type: vehicleInfo.type,
+                capacity: parseInt(vehicleInfo.capacity),
+                amenities: vehicleInfo.amenities || []
+            },
+            pricing: {
+                basePrice: parseFloat(pricing.basePrice),
+                pricePerKm: parseFloat(pricing.pricePerKm),
+                discounts: pricing.discounts || [
+                    { type: 'student', percentage: 10 },
+                    { type: 'senior', percentage: 15 },
+                    { type: 'military', percentage: 20 }
+                ]
+            },
+            // Admin-created routes are automatically approved
+            approvalStatus: 'approved',
+            status: 'active',
+            isActive: true,
+            submittedAt: new Date(),
+            reviewedAt: new Date(),
+            reviewedBy: (_a = req.user) === null || _a === void 0 ? void 0 : _a._id
+        };
+        // Create route
+        const route = new Route_1.default(routeData);
+        await route.save();
+        // Populate the created route
+        const populatedRoute = await Route_1.default.findById(route._id)
+            .populate('reviewedBy', 'name email');
+        res.status(201).json({
+            message: 'Route created successfully',
+            route: populatedRoute
+        });
+    }
+    catch (error) {
+        console.error('Create route error:', error);
+        if (error instanceof Error && error.message.includes('duplicate key')) {
+            res.status(400).json({
+                message: 'Route with similar details already exists'
+            });
+        }
+        else if (error instanceof Error && error.name === 'ValidationError') {
+            res.status(400).json({
+                message: 'Validation error',
+                details: error.message
+            });
+        }
+        else {
+            res.status(500).json({
+                message: 'Server error',
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    }
+};
+exports.createRoute = createRoute;
 // @desc    Get all route applications with filtering and pagination
 // @route   GET /api/admin/routes
 // @access  Private (System Admin)

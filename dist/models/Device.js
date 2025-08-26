@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-// src/models/Device.ts
+// src/models/Device.ts - Updated with Vehicle Approval System
 const mongoose_1 = __importStar(require("mongoose"));
 const DeviceSchema = new mongoose_1.Schema({
     deviceId: {
@@ -52,6 +52,33 @@ const DeviceSchema = new mongoose_1.Schema({
         enum: ['bus', 'train', 'van', 'minibus'],
         required: [true, 'Vehicle type is required'],
     },
+    // APPROVAL SYSTEM FIELDS
+    fleetId: {
+        type: mongoose_1.default.Schema.Types.ObjectId,
+        ref: 'Fleet',
+        required: [true, 'Fleet ID is required'],
+    },
+    approvalStatus: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending',
+    },
+    approvalDate: {
+        type: Date,
+    },
+    rejectionDate: {
+        type: Date,
+    },
+    rejectionReason: {
+        type: String,
+        trim: true,
+        maxlength: [300, 'Rejection reason cannot exceed 300 characters'],
+    },
+    notes: {
+        type: String,
+        trim: true,
+        maxlength: [500, 'Notes cannot exceed 500 characters'],
+    },
     status: {
         type: String,
         enum: ['online', 'offline', 'maintenance'],
@@ -64,15 +91,15 @@ const DeviceSchema = new mongoose_1.Schema({
     location: {
         latitude: {
             type: Number,
-            required: [true, 'Latitude is required'],
+            default: 0,
         },
         longitude: {
             type: Number,
-            required: [true, 'Longitude is required'],
+            default: 0,
         },
         address: {
             type: String,
-            required: [true, 'Address is required'],
+            default: 'Location unknown',
         },
         lastUpdated: {
             type: Date,
@@ -101,12 +128,20 @@ const DeviceSchema = new mongoose_1.Schema({
             type: mongoose_1.default.Schema.Types.ObjectId,
             ref: 'User',
             required: function () {
-                return this.assignedTo.type !== 'system';
+                var _a;
+                return ((_a = this.assignedTo) === null || _a === void 0 ? void 0 : _a.type) !== 'system';
             },
         },
         name: {
             type: String,
             required: [true, 'Assigned name is required'],
+        },
+        adminId: {
+            type: mongoose_1.default.Schema.Types.ObjectId,
+            ref: 'User', // Admin who approved/rejected
+        },
+        assignedAt: {
+            type: Date,
         },
     },
     route: {
@@ -145,12 +180,16 @@ const DeviceSchema = new mongoose_1.Schema({
 }, {
     timestamps: true,
 });
-// Index for better query performance
-// DeviceSchema.index({ deviceId: 1 }); // <-- THIS LINE IS REMOVED (unique:true handles it)
+// Indexes for better query performance
 DeviceSchema.index({ vehicleNumber: 1 });
+DeviceSchema.index({ fleetId: 1 });
+DeviceSchema.index({ approvalStatus: 1 });
 DeviceSchema.index({ status: 1 });
 DeviceSchema.index({ 'assignedTo.userId': 1 });
 DeviceSchema.index({ 'location.latitude': 1, 'location.longitude': 1 });
+// Compound indexes for common queries
+DeviceSchema.index({ fleetId: 1, approvalStatus: 1 });
+DeviceSchema.index({ approvalStatus: 1, createdAt: 1 });
 // Method to update device location
 DeviceSchema.methods.updateLocation = function (latitude, longitude, address) {
     this.location = {
@@ -174,6 +213,76 @@ DeviceSchema.methods.clearAlerts = function () {
     this.alerts.messages = [];
     this.alerts.count = 0;
     return this.save();
+};
+// Method to approve device
+DeviceSchema.methods.approve = function (adminId, notes) {
+    this.approvalStatus = 'approved';
+    this.approvalDate = new Date();
+    this.rejectionDate = undefined;
+    this.rejectionReason = undefined;
+    // Update assignedTo with admin info
+    this.assignedTo = {
+        ...this.assignedTo,
+        adminId: adminId,
+        assignedAt: new Date()
+    };
+    if (notes) {
+        this.notes = notes;
+    }
+    return this.save();
+};
+// Method to reject device
+DeviceSchema.methods.reject = function (adminId, reason) {
+    this.approvalStatus = 'rejected';
+    this.rejectionDate = new Date();
+    this.rejectionReason = reason;
+    this.approvalDate = undefined;
+    // Update assignedTo with admin info
+    this.assignedTo = {
+        ...this.assignedTo,
+        adminId: adminId,
+        assignedAt: new Date()
+    };
+    return this.save();
+};
+// Pre-save middleware to auto-generate deviceId if not provided
+DeviceSchema.pre('save', function (next) {
+    if (!this.deviceId) {
+        this.deviceId = `DEV_${this.vehicleNumber}_${Date.now()}`;
+    }
+    next();
+});
+// Pre-save middleware for business rules
+DeviceSchema.pre('save', function (next) {
+    var _a;
+    // Only approved devices can be assigned to routes
+    if (this.approvalStatus !== 'approved' && ((_a = this.route) === null || _a === void 0 ? void 0 : _a.routeId)) {
+        return next(new Error('Only approved devices can be assigned to routes'));
+    }
+    // Rejection reason is required for rejected devices
+    if (this.approvalStatus === 'rejected' && !this.rejectionReason) {
+        return next(new Error('Rejection reason is required for rejected devices'));
+    }
+    next();
+});
+// Static method to get devices by approval status
+DeviceSchema.statics.getByApprovalStatus = async function (status, fleetId) {
+    const query = { approvalStatus: status, isActive: true };
+    if (fleetId) {
+        query.fleetId = new mongoose_1.default.Types.ObjectId(fleetId);
+    }
+    return this.find(query)
+        .populate('fleetId', 'companyName registrationNumber contactPerson email')
+        .sort({ createdAt: 1 });
+};
+// Static method to get pending devices
+DeviceSchema.statics.getPendingDevices = async function () {
+    return this.find({
+        approvalStatus: 'pending',
+        isActive: true
+    })
+        .populate('fleetId', 'companyName registrationNumber contactPerson email')
+        .sort({ createdAt: 1 });
 };
 const Device = mongoose_1.default.model('Device', DeviceSchema);
 exports.default = Device;

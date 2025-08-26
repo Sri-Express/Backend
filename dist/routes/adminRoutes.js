@@ -18,6 +18,8 @@ const adminSystemController_1 = require("../controllers/adminSystemController");
 const adminEmergencyController_1 = require("../controllers/adminEmergencyController");
 // Fleet management controllers
 const adminFleetController_1 = require("../controllers/adminFleetController");
+// Vehicle management controllers
+const adminVehicleController_1 = require("../controllers/adminVehicleController");
 // Route management controllers
 const adminRouteController_1 = require("../controllers/adminRouteController");
 // GPS Simulation controllers
@@ -158,12 +160,50 @@ router.get('/fleet/test/endpoints', async (req, res) => {
     }
 });
 // ============================
+// VEHICLE MANAGEMENT ROUTES
+// ============================
+router.get('/vehicles', adminVehicleController_1.getAllVehicles);
+router.get('/vehicles/stats', adminVehicleController_1.getVehicleStats);
+router.get('/vehicles/pending', adminVehicleController_1.getPendingVehicles);
+router.get('/vehicles/:id', adminVehicleController_1.getVehicleById);
+router.put('/vehicles/:id/approve', adminVehicleController_1.approveVehicle);
+router.put('/vehicles/:id/reject', adminVehicleController_1.rejectVehicle);
+router.put('/vehicles/bulk-approve', adminVehicleController_1.bulkApproveVehicles);
+router.put('/vehicles/bulk-reject', adminVehicleController_1.bulkRejectVehicles);
+router.delete('/vehicles/:id', adminVehicleController_1.deleteVehicle);
+// Test route for vehicle admin endpoints
+router.get('/vehicles/test/endpoints', async (req, res) => {
+    try {
+        res.json({
+            message: 'Vehicle admin endpoints are working!',
+            timestamp: new Date().toISOString(),
+            availableEndpoints: [
+                'GET /api/admin/vehicles - Get all vehicles',
+                'GET /api/admin/vehicles/stats - Vehicle statistics',
+                'GET /api/admin/vehicles/pending - Pending vehicles',
+                'GET /api/admin/vehicles/:id - Get vehicle by ID',
+                'PUT /api/admin/vehicles/:id/approve - Approve vehicle',
+                'PUT /api/admin/vehicles/:id/reject - Reject vehicle',
+                'PUT /api/admin/vehicles/bulk-approve - Bulk approve vehicles',
+                'PUT /api/admin/vehicles/bulk-reject - Bulk reject vehicles',
+                'DELETE /api/admin/vehicles/:id - Delete vehicle',
+                'GET /api/admin/vehicles/test/endpoints - This test endpoint'
+            ],
+            totalEndpoints: 10
+        });
+    }
+    catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+});
+// ============================
 // ROUTE MANAGEMENT ROUTES
 // ============================
 router.get('/routes', adminRouteController_1.getAllRoutes);
 router.get('/routes/stats', adminRouteController_1.getRouteStats);
 router.get('/routes/pending', adminRouteController_1.getPendingRoutes);
 router.get('/routes/fleet/:fleetId', adminRouteController_1.getRoutesByFleet);
+router.post('/routes', adminRouteController_1.createRoute); // NEW: Admin route creation
 router.get('/routes/:id', adminRouteController_1.getRouteById);
 router.put('/routes/:id/approve', adminRouteController_1.approveRoute);
 router.put('/routes/:id/reject', adminRouteController_1.rejectRoute);
@@ -180,6 +220,7 @@ router.get('/routes/test/endpoints', async (req, res) => {
                 'GET /api/admin/routes/stats - Route statistics',
                 'GET /api/admin/routes/pending - Pending routes',
                 'GET /api/admin/routes/fleet/:fleetId - Routes by fleet',
+                'POST /api/admin/routes - Create new route (NEW)',
                 'GET /api/admin/routes/:id - Get route by ID',
                 'PUT /api/admin/routes/:id/approve - Approve route',
                 'PUT /api/admin/routes/:id/reject - Reject route',
@@ -187,7 +228,7 @@ router.get('/routes/test/endpoints', async (req, res) => {
                 'DELETE /api/admin/routes/:id - Delete route',
                 'GET /api/admin/routes/test/endpoints - This test endpoint'
             ],
-            totalEndpoints: 10
+            totalEndpoints: 11
         });
     }
     catch (error) {
@@ -376,25 +417,26 @@ router.post('/test/activity', async (req, res) => {
 router.get('/docs', (req, res) => {
     res.json({
         message: 'Sri Express Admin API Documentation',
-        version: '3.1.0',
-        status: 'GPS Simulation System + Route Management Fully Integrated!',
+        version: '3.2.0',
+        status: 'GPS Simulation System + Route Management + Admin Route Creation Fully Integrated!',
         endpoints: {
             users: 'User management endpoints (10 total)',
             devices: 'Device management endpoints (8 total)',
             fleet: 'Fleet management endpoints (13 total)',
-            routes: 'Route management endpoints (10 total)',
+            routes: 'Route management endpoints (11 total - NOW WITH ADMIN CREATION)',
             simulation: 'GPS simulation endpoints (8 total)',
             ai: 'AI module endpoints (3 total)',
             emergency: 'Emergency management endpoints (7 total)',
             analytics: 'Analytics and reporting endpoints (5 total)'
         },
-        totalEndpoints: '70+',
+        totalEndpoints: '71+',
         newFeatures: [
-            'Complete route management system',
-            'Route approval/rejection workflow',
-            'Fleet-specific route filtering',
-            'Route statistics and analytics',
-            'Pending route management'
+            '✅ Admin route creation system',
+            '✅ Complete route management system',
+            '✅ Route approval/rejection workflow',
+            '✅ Fleet-specific route filtering',
+            '✅ Route statistics and analytics',
+            '✅ Pending route management'
         ],
         simulationFeatures: [
             'Real-time GPS tracking simulation',

@@ -38,8 +38,11 @@ const mongoose_1 = __importStar(require("mongoose"));
 const RouteSchema = new mongoose_1.Schema({
     routeId: {
         type: String,
-        required: true,
+        required: false, // Remove required since it's auto-generated
         unique: true,
+        default: function () {
+            return `RT${Date.now()}${Math.floor(Math.random() * 1000)}`;
+        }
     },
     name: {
         type: String,
@@ -215,13 +218,6 @@ RouteSchema.index({ isActive: 1 });
 RouteSchema.index({ submittedAt: -1 });
 RouteSchema.index({ 'startLocation.name': 1 });
 RouteSchema.index({ 'endLocation.name': 1 });
-// Generate routeId before saving
-RouteSchema.pre('save', function (next) {
-    if (!this.routeId) {
-        this.routeId = `RT${Date.now()}${Math.floor(Math.random() * 1000)}`;
-    }
-    next();
-});
 // Calculate price method
 RouteSchema.methods.calculatePrice = function (passengerType = 'regular') {
     let totalPrice = this.pricing.basePrice + (this.distance * this.pricing.pricePerKm);

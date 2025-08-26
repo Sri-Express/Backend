@@ -41,6 +41,32 @@ export interface IFleet extends Document {
     averageFleetAge: number;
     maintenanceSchedule: string;
     safetyRating?: number;
+    notifications?: {
+      emailAlerts?: boolean;
+      smsAlerts?: boolean;
+      emergencyAlerts?: boolean;
+      maintenanceReminders?: boolean;
+      routeUpdates?: boolean;
+    };
+    privacy?: {
+      shareLocation?: boolean;
+      sharePerformanceData?: boolean;
+      allowAnalytics?: boolean;
+    };
+    operational?: {
+      autoAcceptBookings?: boolean;
+      emergencyContactNumber?: string;
+      operatingHours?: {
+        start?: string;
+        end?: string;
+      };
+      maintenanceSchedule?: string;
+    };
+    billing?: {
+      paymentMethod?: string;
+      invoiceFrequency?: string;
+      autoPayEnabled?: boolean;
+    };
   };
   isActive: boolean;
   createdAt: Date;
@@ -225,6 +251,32 @@ const FleetSchema = new Schema<IFleet>(
         type: Number,
         min: [1, 'Safety rating must be at least 1'],
         max: [5, 'Safety rating cannot exceed 5']
+      },
+      notifications: {
+        emailAlerts: { type: Boolean, default: true },
+        smsAlerts: { type: Boolean, default: false },
+        emergencyAlerts: { type: Boolean, default: true },
+        maintenanceReminders: { type: Boolean, default: true },
+        routeUpdates: { type: Boolean, default: true }
+      },
+      privacy: {
+        shareLocation: { type: Boolean, default: true },
+        sharePerformanceData: { type: Boolean, default: false },
+        allowAnalytics: { type: Boolean, default: true }
+      },
+      operational: {
+        autoAcceptBookings: { type: Boolean, default: false },
+        emergencyContactNumber: { type: String, trim: true },
+        operatingHours: {
+          start: { type: String, default: '06:00' },
+          end: { type: String, default: '22:00' }
+        },
+        maintenanceSchedule: { type: String, default: 'weekly' }
+      },
+      billing: {
+        paymentMethod: { type: String, default: 'bank_transfer' },
+        invoiceFrequency: { type: String, default: 'monthly' },
+        autoPayEnabled: { type: Boolean, default: false }
       }
     },
     isActive: {
