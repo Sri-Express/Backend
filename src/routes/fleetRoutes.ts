@@ -1,4 +1,4 @@
-// src/routes/fleetRoutes.ts - Fleet Operator Routes
+// src/routes/fleetRoutes.ts - Fleet Operator Routes - FIXED VERSION
 import express from 'express';
 
 // --- CORRECTED IMPORT ---
@@ -18,6 +18,7 @@ import {
   createFleetRoute,
   updateFleetRoute,
   deleteFleetRoute,
+  getFleetRouteDetails,  // ← ADD THIS MISSING IMPORT
   getFleetAnalytics
 } from '../controllers/fleetController';
 
@@ -44,6 +45,7 @@ router.delete('/vehicles/:id', deleteVehicle);
 // Route Management
 router.get('/routes', getFleetRoutes);
 router.post('/routes', createFleetRoute);
+router.get('/routes/:id', getFleetRouteDetails);  // ← ADD THIS MISSING ROUTE
 router.put('/routes/:id', updateFleetRoute);
 router.delete('/routes/:id', deleteFleetRoute);
 
@@ -60,6 +62,7 @@ router.get('/test', (req, res) => {
       'GET /api/fleet/dashboard',
       'GET /api/fleet/profile',
       'PUT /api/fleet/profile',
+      'POST /api/fleet/profile',
       'GET /api/fleet/vehicles',
       'POST /api/fleet/vehicles',
       'GET /api/fleet/vehicles/:id',
@@ -67,6 +70,7 @@ router.get('/test', (req, res) => {
       'DELETE /api/fleet/vehicles/:id',
       'GET /api/fleet/routes',
       'POST /api/fleet/routes',
+      'GET /api/fleet/routes/:id',        // ← ADD THIS TO THE LIST
       'PUT /api/fleet/routes/:id',
       'DELETE /api/fleet/routes/:id',
       'GET /api/fleet/analytics',
