@@ -3,10 +3,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getFleetAnalytics = exports.getFleetRouteDetails = exports.deleteFleetRoute = exports.updateFleetRoute = exports.createFleetRoute = exports.getFleetRoutes = exports.deleteVehicle = exports.getVehicleDetails = exports.updateVehicle = exports.addVehicle = exports.getFleetVehicles = exports.markNotificationRead = exports.getFleetNotifications = exports.updateFleetSettings = exports.getFleetSettings = exports.updateFleetProfile = exports.getFleetProfile = exports.getFleetDashboard = void 0;
+exports.getFleetAnalytics = exports.deleteVehicle = exports.getVehicleDetails = exports.updateVehicle = exports.addVehicle = exports.getFleetVehicles = exports.markNotificationRead = exports.getFleetNotifications = exports.updateFleetSettings = exports.getFleetSettings = exports.updateFleetProfile = exports.getFleetProfile = exports.getFleetDashboard = void 0;
 const Fleet_1 = __importDefault(require("../models/Fleet"));
-const Route_1 = __importDefault(require("../models/Route"));
-const Device_1 = __importDefault(require("../models/Device"));
+const Device_1 = __importDefault(require("../models/Device")); // Standardized on Device model
 // @desc    Get fleet dashboard data for logged-in fleet manager
 // @route   GET /api/fleet/dashboard
 // @access  Private (Fleet Manager)
@@ -24,19 +23,13 @@ const getFleetDashboard = async (req, res) => {
             'assignedTo.userId': userId,
             isActive: true
         }).limit(10);
-        // Get fleet routes
-        const routes = await Route_1.default.find({
-            'operatorInfo.fleetId': fleet === null || fleet === void 0 ? void 0 : fleet._id,
-            isActive: true
-        }).limit(5);
         // Calculate real-time statistics
         const fleetStats = fleet ? {
             fleetStatus: fleet.status,
             complianceScore: fleet.complianceScore || 0,
-            totalVehicles: vehicles.length, // Use actual count from vehicles
+            totalVehicles: vehicles.length,
             activeVehicles: vehicles.filter(v => v.status === 'online').length,
-            operatingRoutes: routes.length,
-            totalRoutes: routes.length,
+            operatingRoutes: 0, // Will be calculated from route assignments
             onlineVehicles: vehicles.filter(v => v.status === 'online').length,
             maintenanceVehicles: vehicles.filter(v => v.status === 'maintenance').length
         } : {
@@ -44,8 +37,7 @@ const getFleetDashboard = async (req, res) => {
             complianceScore: 0,
             totalVehicles: vehicles.length,
             activeVehicles: vehicles.filter(v => v.status === 'online').length,
-            operatingRoutes: routes.length,
-            totalRoutes: routes.length,
+            operatingRoutes: 0,
             onlineVehicles: vehicles.filter(v => v.status === 'online').length,
             maintenanceVehicles: vehicles.filter(v => v.status === 'maintenance').length
         };
@@ -72,7 +64,6 @@ const getFleetDashboard = async (req, res) => {
                 activeVehicles: vehicles.filter(v => v.status === 'online').length
             },
             stats: fleetStats,
-            routes: routes.slice(0, 3), // Latest 3 routes
             vehicles: vehicles.slice(0, 5), // Latest 5 vehicles
             alerts: [] // Real alerts can be implemented later
         });
@@ -242,7 +233,6 @@ const updateFleetProfile = async (req, res) => {
     }
 };
 exports.updateFleetProfile = updateFleetProfile;
-// NEW: Get fleet settings
 // @desc    Get fleet settings
 // @route   GET /api/fleet/settings
 // @access  Private (Fleet Manager)
@@ -297,7 +287,6 @@ const getFleetSettings = async (req, res) => {
     }
 };
 exports.getFleetSettings = getFleetSettings;
-// NEW: Update fleet settings
 // @desc    Update fleet settings
 // @route   PUT /api/fleet/settings
 // @access  Private (Fleet Manager)
@@ -349,7 +338,6 @@ const updateFleetSettings = async (req, res) => {
     }
 };
 exports.updateFleetSettings = updateFleetSettings;
-// NEW: Get fleet notifications
 // @desc    Get fleet notifications
 // @route   GET /api/fleet/notifications
 // @access  Private (Fleet Manager)
@@ -360,13 +348,13 @@ const getFleetNotifications = async (req, res) => {
         const notifications = [
             {
                 _id: '1',
-                type: 'route_approved',
-                title: 'Route Application Approved',
-                message: 'Your route application for "Padukka to Colombo" has been approved',
+                type: 'vehicle_approved',
+                title: 'Vehicle Application Approved',
+                message: 'Your vehicle BUS-001 has been approved by admin',
                 read: false,
                 createdAt: new Date(Date.now() - 3600000), // 1 hour ago
                 priority: 'high',
-                category: 'route'
+                category: 'vehicle'
             },
             {
                 _id: '2',
@@ -414,7 +402,6 @@ const getFleetNotifications = async (req, res) => {
     }
 };
 exports.getFleetNotifications = getFleetNotifications;
-// NEW: Mark notification as read
 // @desc    Mark notification as read
 // @route   PUT /api/fleet/notifications/:id/read
 // @access  Private (Fleet Manager)
@@ -520,7 +507,9 @@ const addVehicle = async (req, res) => {
                 count: 0,
                 messages: []
             },
-            isActive: true
+            isActive: true,
+            // Set fleet reference if fleet exists
+            fleetId: fleet === null || fleet === void 0 ? void 0 : fleet._id
         };
         // Create the vehicle in database
         const vehicle = await Device_1.default.create(vehicleData);
@@ -709,426 +698,6 @@ const deleteVehicle = async (req, res) => {
     }
 };
 exports.deleteVehicle = deleteVehicle;
-// @desc    Get fleet routes with approval status
-// @route   GET /api/fleet/routes
-// @access  Private (Fleet Manager)
-const getFleetRoutes = async (req, res) => {
-    var _a, _b, _c;
-    try {
-        console.log('🔍 Fleet routes - User:', (_a = req.user) === null || _a === void 0 ? void 0 : _a.email, 'Role:', (_b = req.user) === null || _b === void 0 ? void 0 : _b.role);
-        // Find the fleet profile for this user
-        const fleet = await Fleet_1.default.findOne({
-            email: (_c = req.user) === null || _c === void 0 ? void 0 : _c.email,
-            isActive: true
-        });
-        console.log('🔍 Fleet routes - Fleet found:', fleet ? fleet.companyName : 'None');
-        let routes = [];
-        let stats = {
-            total: 0,
-            pending: 0,
-            approved: 0,
-            rejected: 0,
-            active: 0,
-            inactive: 0,
-            maintenance: 0
-        };
-        if (fleet) {
-            // Find all routes (including pending, approved, rejected) for this fleet
-            routes = await Route_1.default.find({
-                'operatorInfo.fleetId': fleet._id,
-                isActive: true
-            })
-                .populate('reviewedBy', 'name email')
-                .sort({ submittedAt: -1 });
-            console.log('🔍 Fleet routes - Found routes:', routes.length);
-            // Calculate statistics from actual routes
-            stats = {
-                total: routes.length,
-                pending: routes.filter(r => r.approvalStatus === 'pending').length,
-                approved: routes.filter(r => r.approvalStatus === 'approved').length,
-                rejected: routes.filter(r => r.approvalStatus === 'rejected').length,
-                active: routes.filter(r => r.approvalStatus === 'approved' && r.status === 'active').length,
-                inactive: routes.filter(r => r.status === 'inactive').length,
-                maintenance: routes.filter(r => r.status === 'maintenance').length
-            };
-        }
-        else {
-            console.log('⚠️ Fleet routes - No fleet profile found');
-            routes = [];
-            stats = {
-                total: 0,
-                pending: 0,
-                approved: 0,
-                rejected: 0,
-                active: 0,
-                inactive: 0,
-                maintenance: 0
-            };
-        }
-        console.log('✅ Fleet routes - Returning', routes.length, 'routes');
-        res.json({
-            routes,
-            stats,
-            message: !fleet ?
-                'No fleet profile found. Please contact admin to set up your fleet profile.' :
-                routes.length === 0 ? 'No routes found. Submit a route application to get started.' :
-                    undefined
-        });
-    }
-    catch (error) {
-        console.error('Get fleet routes error:', error);
-        res.status(500).json({
-            message: 'Server error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
-    }
-};
-exports.getFleetRoutes = getFleetRoutes;
-// @desc    Create new fleet route (Submit for approval)
-// @route   POST /api/fleet/routes
-// @access  Private (Fleet Manager)
-const createFleetRoute = async (req, res) => {
-    var _a, _b;
-    try {
-        console.log('🔍 Create fleet route - User:', (_a = req.user) === null || _a === void 0 ? void 0 : _a.email);
-        const fleet = await Fleet_1.default.findOne({
-            email: (_b = req.user) === null || _b === void 0 ? void 0 : _b.email,
-            isActive: true
-        });
-        if (!fleet) {
-            res.status(404).json({
-                message: 'Fleet profile not found. Please complete your fleet profile first.'
-            });
-            return;
-        }
-        // Check if fleet is approved
-        if (fleet.status !== 'approved') {
-            res.status(403).json({
-                message: `Cannot submit routes. Fleet status: ${fleet.status}. Please wait for fleet approval.`
-            });
-            return;
-        }
-        const { name, startLocation, endLocation, waypoints = [], distance, estimatedDuration, schedules, vehicleInfo, pricing } = req.body;
-        // Validate required fields
-        if (!name || !startLocation || !endLocation || !distance || !estimatedDuration || !schedules || !vehicleInfo || !pricing) {
-            res.status(400).json({
-                message: 'All required fields must be provided: name, startLocation, endLocation, distance, estimatedDuration, schedules, vehicleInfo, pricing'
-            });
-            return;
-        }
-        // Validate start and end locations have required fields
-        if (!startLocation.name || !startLocation.address || !endLocation.name || !endLocation.address) {
-            res.status(400).json({
-                message: 'Start and end locations must have name and address'
-            });
-            return;
-        }
-        // Validate vehicle info
-        if (!vehicleInfo.type || !vehicleInfo.capacity) {
-            res.status(400).json({
-                message: 'Vehicle type and capacity are required'
-            });
-            return;
-        }
-        // Parse and validate pricing
-        const parsedBasePrice = parseFloat(pricing.basePrice);
-        const parsedPricePerKm = parseFloat(pricing.pricePerKm);
-        if (isNaN(parsedBasePrice) || isNaN(parsedPricePerKm) ||
-            parsedBasePrice <= 0 || parsedPricePerKm <= 0) {
-            res.status(400).json({
-                message: 'Base price and price per km must be valid positive numbers'
-            });
-            return;
-        }
-        // Check for duplicate route names within fleet
-        const existingRoute = await Route_1.default.findOne({
-            name: name.trim(),
-            'operatorInfo.fleetId': fleet._id,
-            isActive: true,
-            approvalStatus: { $in: ['pending', 'approved'] } // Don't check rejected routes
-        });
-        if (existingRoute) {
-            res.status(400).json({
-                message: 'A route with this name already exists in your fleet'
-            });
-            return;
-        }
-        // Create route data - routes start as 'pending' approval
-        const routeData = {
-            name: name.trim(),
-            startLocation: {
-                name: startLocation.name.trim(),
-                coordinates: startLocation.coordinates || [79.8612, 6.9271],
-                address: startLocation.address.trim()
-            },
-            endLocation: {
-                name: endLocation.name.trim(),
-                coordinates: endLocation.coordinates || [80.2210, 5.9549],
-                address: endLocation.address.trim()
-            },
-            waypoints: waypoints.map((stop, index) => ({
-                name: stop.name,
-                coordinates: stop.coordinates || [79.8612 + (index * 0.1), 6.9271 + (index * 0.1)],
-                estimatedTime: stop.estimatedTime || (index + 1) * 30,
-                order: index
-            })),
-            distance: parseFloat(distance),
-            estimatedDuration: parseInt(estimatedDuration),
-            schedules: schedules.map((schedule) => ({
-                departureTime: schedule.departureTime,
-                arrivalTime: schedule.arrivalTime || schedule.departureTime,
-                frequency: schedule.frequency || 60,
-                daysOfWeek: schedule.daysOfWeek || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
-                isActive: true
-            })),
-            operatorInfo: {
-                fleetId: fleet._id,
-                companyName: fleet.companyName,
-                contactNumber: fleet.phone || '+94-XXX-XXXX'
-            },
-            vehicleInfo: {
-                type: vehicleInfo.type === 'train' ? 'train' : 'bus',
-                capacity: parseInt(vehicleInfo.capacity),
-                amenities: vehicleInfo.amenities || []
-            },
-            pricing: {
-                basePrice: parsedBasePrice, // Use the parsed values
-                pricePerKm: parsedPricePerKm, // Use the parsed values
-                discounts: pricing.discounts || [
-                    { type: 'student', percentage: 50 },
-                    { type: 'senior', percentage: 25 },
-                    { type: 'military', percentage: 30 }
-                ]
-            },
-            // Approval workflow - new routes start as pending
-            approvalStatus: 'pending',
-            submittedAt: new Date(),
-            // Operational status
-            status: 'active', // Will be used once approved
-            isActive: true
-        };
-        // Create the route
-        const route = await Route_1.default.create(routeData);
-        console.log('✅ Create fleet route - Created:', route.name);
-        res.status(201).json({
-            message: 'Route application submitted successfully. It will be reviewed by administrators.',
-            route: {
-                _id: route._id,
-                routeId: route.routeId,
-                name: route.name,
-                startLocation: route.startLocation,
-                endLocation: route.endLocation,
-                distance: route.distance,
-                estimatedDuration: route.estimatedDuration,
-                approvalStatus: route.approvalStatus,
-                submittedAt: route.submittedAt,
-                pricing: route.pricing,
-                vehicleInfo: route.vehicleInfo
-            }
-        });
-    }
-    catch (error) {
-        console.error('Create fleet route error:', error);
-        // Handle validation errors
-        if (error && typeof error === 'object' && 'name' in error && error.name === 'ValidationError') {
-            const validationErrors = Object.values(error.errors).map((err) => err.message);
-            res.status(400).json({
-                message: 'Validation error',
-                errors: validationErrors
-            });
-            return;
-        }
-        res.status(500).json({
-            message: 'Server error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
-    }
-};
-exports.createFleetRoute = createFleetRoute;
-// @desc    Update fleet route (only for pending or rejected routes)
-// @route   PUT /api/fleet/routes/:id
-// @access  Private (Fleet Manager)
-const updateFleetRoute = async (req, res) => {
-    var _a;
-    try {
-        const { id } = req.params;
-        const fleet = await Fleet_1.default.findOne({
-            email: (_a = req.user) === null || _a === void 0 ? void 0 : _a.email,
-            isActive: true
-        });
-        if (!fleet) {
-            res.status(404).json({ message: 'Fleet not found' });
-            return;
-        }
-        // Find the route and ensure it belongs to this fleet
-        const route = await Route_1.default.findOne({
-            _id: id,
-            'operatorInfo.fleetId': fleet._id,
-            isActive: true
-        });
-        if (!route) {
-            res.status(404).json({ message: 'Route not found' });
-            return;
-        }
-        // Only allow updates to pending or rejected routes
-        if (route.approvalStatus === 'approved') {
-            res.status(403).json({
-                message: 'Cannot modify approved routes. Contact admin for changes.'
-            });
-            return;
-        }
-        const { name, startLocation, endLocation, waypoints, distance, estimatedDuration, schedules, vehicleInfo, pricing } = req.body;
-        // Check for duplicate names (excluding current route)
-        if (name && name !== route.name) {
-            const existingRoute = await Route_1.default.findOne({
-                name: name.trim(),
-                'operatorInfo.fleetId': fleet._id,
-                _id: { $ne: id },
-                isActive: true,
-                approvalStatus: { $in: ['pending', 'approved'] }
-            });
-            if (existingRoute) {
-                res.status(400).json({
-                    message: 'A route with this name already exists in your fleet'
-                });
-                return;
-            }
-        }
-        // Update allowed fields
-        if (name)
-            route.name = name.trim();
-        if (startLocation) {
-            route.startLocation = {
-                name: startLocation.name.trim(),
-                coordinates: startLocation.coordinates || route.startLocation.coordinates,
-                address: startLocation.address.trim()
-            };
-        }
-        if (endLocation) {
-            route.endLocation = {
-                name: endLocation.name.trim(),
-                coordinates: endLocation.coordinates || route.endLocation.coordinates,
-                address: endLocation.address.trim()
-            };
-        }
-        if (waypoints)
-            route.waypoints = waypoints;
-        if (distance)
-            route.distance = parseFloat(distance);
-        if (estimatedDuration)
-            route.estimatedDuration = parseInt(estimatedDuration);
-        if (schedules)
-            route.schedules = schedules;
-        if (vehicleInfo)
-            route.vehicleInfo = vehicleInfo;
-        if (pricing)
-            route.pricing = pricing;
-        // If route was rejected, resubmit for approval
-        if (route.approvalStatus === 'rejected') {
-            await route.resubmit();
-        }
-        const updatedRoute = await route.save();
-        res.json({
-            message: route.approvalStatus === 'pending' ? 'Route updated successfully' : 'Route resubmitted for approval',
-            route: updatedRoute
-        });
-    }
-    catch (error) {
-        console.error('Update fleet route error:', error);
-        res.status(500).json({
-            message: 'Server error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
-    }
-};
-exports.updateFleetRoute = updateFleetRoute;
-// @desc    Delete fleet route (only pending/rejected routes)
-// @route   DELETE /api/fleet/routes/:id
-// @access  Private (Fleet Manager)
-const deleteFleetRoute = async (req, res) => {
-    var _a;
-    try {
-        const { id } = req.params;
-        const fleet = await Fleet_1.default.findOne({
-            email: (_a = req.user) === null || _a === void 0 ? void 0 : _a.email,
-            isActive: true
-        });
-        if (!fleet) {
-            res.status(404).json({ message: 'Fleet not found' });
-            return;
-        }
-        // Find the route and ensure it belongs to this fleet
-        const route = await Route_1.default.findOne({
-            _id: id,
-            'operatorInfo.fleetId': fleet._id,
-            isActive: true
-        });
-        if (!route) {
-            res.status(404).json({ message: 'Route not found' });
-            return;
-        }
-        // Only allow deletion of pending or rejected routes
-        if (route.approvalStatus === 'approved') {
-            res.status(403).json({
-                message: 'Cannot delete approved routes. Contact admin to deactivate the route.'
-            });
-            return;
-        }
-        // Soft delete
-        route.isActive = false;
-        await route.save();
-        res.json({
-            message: 'Route application deleted successfully'
-        });
-    }
-    catch (error) {
-        console.error('Delete fleet route error:', error);
-        res.status(500).json({
-            message: 'Server error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
-    }
-};
-exports.deleteFleetRoute = deleteFleetRoute;
-// @desc    Get single route details for fleet manager
-// @route   GET /api/fleet/routes/:id
-// @access  Private (Fleet Manager)
-const getFleetRouteDetails = async (req, res) => {
-    var _a;
-    try {
-        const { id } = req.params;
-        const fleet = await Fleet_1.default.findOne({
-            email: (_a = req.user) === null || _a === void 0 ? void 0 : _a.email,
-            isActive: true
-        });
-        if (!fleet) {
-            res.status(404).json({ message: 'Fleet not found' });
-            return;
-        }
-        const route = await Route_1.default.findOne({
-            _id: id,
-            'operatorInfo.fleetId': fleet._id,
-            isActive: true
-        }).populate('reviewedBy', 'name email');
-        if (!route) {
-            res.status(404).json({ message: 'Route not found' });
-            return;
-        }
-        res.json({
-            route,
-            canEdit: route.approvalStatus === 'pending' || route.approvalStatus === 'rejected',
-            canDelete: route.approvalStatus === 'pending' || route.approvalStatus === 'rejected'
-        });
-    }
-    catch (error) {
-        console.error('Get fleet route details error:', error);
-        res.status(500).json({
-            message: 'Server error',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
-    }
-};
-exports.getFleetRouteDetails = getFleetRouteDetails;
 // @desc    Get fleet analytics
 // @route   GET /api/fleet/analytics
 // @access  Private (Fleet Manager)
@@ -1149,11 +718,6 @@ const getFleetAnalytics = async (req, res) => {
             'assignedTo.userId': userId,
             isActive: true
         });
-        // Get routes
-        const routes = await Route_1.default.find({
-            'operatorInfo.fleetId': fleet._id,
-            isActive: true
-        });
         const analytics = {
             fleet: {
                 complianceScore: fleet.complianceScore,
@@ -1168,11 +732,6 @@ const getFleetAnalytics = async (req, res) => {
                 maintenance: vehicles.filter(v => v.status === 'maintenance').length,
                 avgBattery: vehicles.reduce((sum, v) => sum + v.batteryLevel, 0) / vehicles.length || 0,
                 avgSignal: vehicles.reduce((sum, v) => sum + v.signalStrength, 0) / vehicles.length || 0
-            },
-            routes: {
-                total: routes.length,
-                active: routes.filter(r => r.status === 'active').length,
-                avgRating: routes.reduce((sum, r) => sum + (r.avgRating || 0), 0) / routes.length || 0
             },
             performance: {
                 utilizationRate: fleet.activeVehicles / fleet.totalVehicles * 100 || 0,

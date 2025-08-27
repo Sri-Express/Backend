@@ -1,11 +1,12 @@
-// src/routes/fleetRoutes.ts - Fleet Routes FIXED (Route Assignment Only)
+// src/routes/fleetRoutes.ts - Fleet Routes FIXED (Added missing profile GET route)
 import express from 'express';
 import { protect } from '../middleware/authMiddleware';
 import { requireFleetManager } from '../middleware/fleetMiddleware';
 
-// Fleet management controllers (existing functions)
+// Fleet management controllers (existing functions) - FIXED: Added missing getFleetProfile import
 import { 
   getFleetDashboard,
+  getFleetProfile,        // ← MISSING IMPORT - ADDED
   updateFleetProfile,
   getFleetSettings,
   updateFleetSettings,
@@ -40,6 +41,7 @@ router.use(requireFleetManager);
 // FLEET DASHBOARD & PROFILE
 // ============================
 router.get('/dashboard', getFleetDashboard);
+router.get('/profile', getFleetProfile);      // ← MISSING ROUTE - ADDED
 router.put('/profile', updateFleetProfile);
 router.get('/settings', getFleetSettings);
 router.put('/settings', updateFleetSettings);
@@ -218,6 +220,8 @@ router.get('/test/route-assignments', async (req, res) => {
       message: 'Fleet route assignment endpoints are working! (ROUTE CREATION REMOVED)',
       timestamp: new Date().toISOString(),
       availableEndpoints: [
+        'GET /api/fleet/profile - Get fleet profile (FIXED)',    // ← ADDED
+        'PUT /api/fleet/profile - Update fleet profile',
         'GET /api/fleet/routes/available - Get available routes for assignment',
         'GET /api/fleet/route-assignments - Get current assignments',
         'GET /api/fleet/route-assignments/stats - Get assignment statistics',
@@ -239,7 +243,11 @@ router.get('/test/route-assignments', async (req, res) => {
         '❌ DELETE /api/fleet/routes/:id - Route deletion (admin only)',
         '❌ GET /api/fleet/routes/:id - Individual route management (admin only)'
       ],
-      totalEndpoints: '30+'
+      totalEndpoints: '31+',
+      fixes: [
+        '✅ Added missing getFleetProfile import',
+        '✅ Added missing GET /api/fleet/profile route'
+      ]
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: (error as Error).message });
@@ -248,11 +256,11 @@ router.get('/test/route-assignments', async (req, res) => {
 
 router.get('/docs', (req, res) => {
   res.json({
-    message: 'Sri Express Fleet Management API Documentation - FIXED VERSION',
-    version: '3.0.0',
+    message: 'Sri Express Fleet Management API Documentation - PROFILE ROUTE FIXED',
+    version: '3.1.0',
     status: 'Fleet Route Assignment Only - Admin Creates Routes',
     endpoints: {
-      dashboard: 'Fleet dashboard and profile management (7 endpoints)',
+      dashboard: 'Fleet dashboard and profile management (8 endpoints)', // ← Updated count
       vehicles: 'Vehicle management with approval system (5 endpoints)',
       routeAssignment: 'Route assignment management (7 endpoints)', 
       operations: 'Trip and schedule operations (2 endpoints)', 
@@ -261,7 +269,7 @@ router.get('/docs', (req, res) => {
       emergency: 'Emergency alerts and safety (2 endpoints)',
       testing: 'Test and debug endpoints (2 endpoints)'
     },
-    totalEndpoints: '29',
+    totalEndpoints: '30',
     correctedWorkflow: {
       step1: 'Admin creates routes via admin panel (/sysadmin/routes)',
       step2: 'Fleet manager applies for fleet registration (/fleet/profile)',
@@ -276,7 +284,8 @@ router.get('/docs', (req, res) => {
       '✅ Standardized on Device model for vehicles',
       '✅ Simplified workflow: Admin creates routes, Fleet assigns vehicles',
       '✅ Clear separation of admin and fleet responsibilities',
-      '✅ Maintained route assignment and performance tracking'
+      '✅ Maintained route assignment and performance tracking',
+      '✅ FIXED: Added missing GET /api/fleet/profile route'  // ← New fix
     ]
   });
 });

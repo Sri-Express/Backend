@@ -1,4 +1,4 @@
-// src/routes/csRoutes.ts - FIXED VERSION
+// src/routes/csRoutes.ts - UPDATED WITH FEEDBACK ROUTE
 import express from 'express';
 import { protect } from '../middleware/authMiddleware';
 import { requireAdmin } from '../middleware/adminMiddleware';
@@ -21,13 +21,16 @@ const router = express.Router();
 router.get('/chat/sessions/stats', protect, logActivity, requireAdmin, asyncHandler(chatController.getChatStats));
 router.get('/chat/sessions/queue', protect, logActivity, requireAdmin, asyncHandler(chatController.getWaitingQueue));
 
-
 // ============================================================================
 // PUBLIC ROUTES (No Auth Required) - For Customers
 // ============================================================================
 router.post('/chat/sessions', asyncHandler(chatController.startChat));
 router.post('/chat/sessions/:id/messages', asyncHandler(chatController.sendMessage));
-router.get('/chat/sessions/:id', asyncHandler(chatController.getChatById)); // Now this won't conflict
+router.get('/chat/sessions/:id', asyncHandler(chatController.getChatById));
+
+// NEW: Customer feedback route (must be public so customers can rate without auth)
+router.post('/chat/sessions/:id/feedback', asyncHandler(chatController.submitFeedback));
+
 router.get('/knowledge/search', asyncHandler(knowledgeController.searchArticles));
 router.get('/knowledge/:id', asyncHandler(knowledgeController.getArticleById));
 router.post('/knowledge/:id/rate', asyncHandler(knowledgeController.rateArticle));
