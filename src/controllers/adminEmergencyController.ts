@@ -1,4 +1,4 @@
-// src/controllers/adminEmergencyController.ts - Enhanced with Real-time Notifications
+// src/controllers/adminEmergencyController.ts - Enhanced with Updated Broadcast Recipients
 import { Request, Response } from 'express';
 import Emergency from '../models/Emergency';
 import Device from '../models/Device';
@@ -27,7 +27,7 @@ const sendSMS = async (phoneNumber: string, message: string): Promise<void> => {
 
 // Push Notification Service (mock implementation)
 const sendPushNotification = async (userId: string, title: string, body: string, data?: any): Promise<void> => {
-  console.log(`🔔 Push notification to user ${userId}: ${title} - ${body}`);
+  console.log(`📲 Push notification to user ${userId}: ${title} - ${body}`);
   // Integrate with actual push service like Firebase, OneSignal, etc.
 };
 
@@ -426,7 +426,7 @@ export const createEmergencyAlert = async (req: Request, res: Response): Promise
       });
 
       await Promise.all(pushPromises);
-      console.log(`🔔 Push notifications sent to ${targetUsers.length} users`);
+      console.log(`📲 Push notifications sent to ${targetUsers.length} users`);
     } catch (pushError) {
       console.error('Push notification failed:', pushError);
     }
@@ -686,14 +686,14 @@ export const resolveEmergency = async (req: Request, res: Response): Promise<voi
   }
 };
 
-// @desc    Send system-wide emergency broadcast with real-time delivery
+// @desc    Send system-wide emergency broadcast with updated recipient mapping
 // @route   POST /api/admin/emergency/broadcast
 // @access  Private (System Admin)
 export const sendEmergencyBroadcast = async (req: Request, res: Response): Promise<void> => {
   try {
     const {
       message,
-      recipients = 'all', // 'all', 'admins', 'users', 'drivers'
+      recipients = 'all', // 'all', 'system_admins', 'fleet_managers', 'users'
       method = 'system', // 'system', 'email', 'sms', 'push'
       priority = 'high',
       relatedIncident
@@ -705,20 +705,28 @@ export const sendEmergencyBroadcast = async (req: Request, res: Response): Promi
       return;
     }
 
-    // Get recipient count based on type
+    // Get recipient count based on updated mapping
     let recipientCount = 0;
     let recipientQuery: any = { isActive: true };
 
     switch (recipients) {
-      case 'admins':
-        recipientQuery.role = { $in: ['system_admin', 'route_admin', 'company_admin'] };
+      case 'system_admins':
+        recipientQuery.role = 'system_admin';
         break;
-      case 'drivers':
-        recipientQuery.role = 'route_admin';
+      case 'fleet_managers':
+        recipientQuery.role = 'company_admin'; // Fleet managers use company_admin role
         break;
       case 'users':
         recipientQuery.role = 'client';
         break;
+      case 'routeadmins':
+        // Not implemented - skip for now
+        recipientCount = 0;
+        res.status(501).json({ 
+          message: 'Route admins broadcast not implemented yet',
+          success: false 
+        });
+        return;
       case 'all':
       default:
         // No additional filter for all users
@@ -793,7 +801,7 @@ export const sendEmergencyBroadcast = async (req: Request, res: Response): Promi
     try {
       const realTimeService = getRealTimeEmergencyService();
       
-      // Send real-time broadcast
+      // Send real-time broadcast with updated recipient mapping
       await realTimeService.sendSystemBroadcast(message, priority, [recipients]);
       
       console.log(`📡 Real-time broadcast delivered to ${recipients} (${recipientCount} users)`);
