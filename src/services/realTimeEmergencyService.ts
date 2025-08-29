@@ -1,4 +1,4 @@
-// src/services/realTimeEmergencyService.ts
+// src/services/realTimeEmergencyService.ts - Enhanced with Updated Recipient Mapping
 import { Server as HTTPServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
@@ -13,7 +13,7 @@ export interface EmergencyNotification {
   priority: 'low' | 'medium' | 'high' | 'critical';
   emergency?: any;
   timestamp: Date;
-  recipients: string[]; // 'all', 'admins', 'users', specific roles
+  recipients: string[]; // 'all', 'system_admins', 'fleet_managers', 'users'
   data?: any;
 }
 
@@ -96,12 +96,30 @@ class RealTimeEmergencyService {
 
     console.log(`🔌 User connected: ${user.name} (${user.role}) - Socket: ${socket.id}`);
 
-    // Join role-based rooms
+    // Join role-based rooms with updated mapping
     socket.join(`role:${user.role}`);
     socket.join('all_users');
     
-    if (user.role.includes('admin')) {
-      socket.join('admins');
+    // Join specific groups based on role
+    switch (user.role) {
+      case 'system_admin':
+        socket.join('system_admins');
+        socket.join('admins');
+        break;
+      case 'company_admin':
+        socket.join('fleet_managers');
+        socket.join('admins');
+        break;
+      case 'route_admin':
+        socket.join('routeadmins'); // For future implementation
+        socket.join('admins');
+        break;
+      case 'customer_service':
+        socket.join('customer_service');
+        break;
+      case 'client':
+        socket.join('users');
+        break;
     }
 
     // Send welcome message and current stats
@@ -152,7 +170,7 @@ class RealTimeEmergencyService {
   private handleDisconnection(socket: Socket): void {
     const connectedUser = this.connectedUsers.get(socket.id);
     if (connectedUser) {
-      console.log(`❌ User disconnected: ${connectedUser.name} - Socket: ${socket.id}`);
+      console.log(`⌐ User disconnected: ${connectedUser.name} - Socket: ${socket.id}`);
       
       // Remove from user sockets
       const userSockets = this.userSockets.get(connectedUser.userId);
@@ -222,7 +240,7 @@ class RealTimeEmergencyService {
   public async broadcastEmergencyAlert(notification: EmergencyNotification): Promise<void> {
     console.log(`🚨 Broadcasting emergency alert: ${notification.title}`);
     
-    // Determine target rooms based on recipients
+    // Determine target rooms based on updated recipients mapping
     const rooms: string[] = [];
     
     notification.recipients.forEach(recipient => {
@@ -230,11 +248,20 @@ class RealTimeEmergencyService {
         case 'all':
           rooms.push('all_users');
           break;
-        case 'admins':
-          rooms.push('admins');
+        case 'system_admins':
+          rooms.push('system_admins');
+          break;
+        case 'fleet_managers':
+          rooms.push('fleet_managers');
           break;
         case 'users':
-          rooms.push('role:client');
+          rooms.push('users');
+          break;
+        case 'routeadmins':
+          rooms.push('routeadmins'); // For future implementation
+          break;
+        case 'customer_service':
+          rooms.push('customer_service');
           break;
         default:
           if (recipient.startsWith('role:')) {
@@ -271,7 +298,7 @@ class RealTimeEmergencyService {
       priority: emergency.priority,
       emergency: emergency,
       timestamp: new Date(),
-      recipients: emergency.priority === 'low' ? ['admins'] : ['all']
+      recipients: emergency.priority === 'low' ? ['system_admins'] : ['all']
     };
 
     await this.broadcastEmergencyAlert(notification);
@@ -289,7 +316,7 @@ class RealTimeEmergencyService {
       priority: 'medium',
       emergency: emergency,
       timestamp: new Date(),
-      recipients: ['admins']
+      recipients: ['system_admins']
     };
 
     await this.broadcastEmergencyAlert(notification);
@@ -396,6 +423,31 @@ class RealTimeEmergencyService {
 
   public async sendToRole(role: string, event: string, data: any): Promise<void> {
     this.io.to(`role:${role}`).emit(event, data);
+  }
+
+  // Updated method to send to specific groups based on new recipient mapping
+  public async sendToRecipientGroup(group: string, event: string, data: any): Promise<void> {
+    switch (group) {
+      case 'system_admins':
+        this.io.to('system_admins').emit(event, data);
+        break;
+      case 'fleet_managers':
+        this.io.to('fleet_managers').emit(event, data);
+        break;
+      case 'users':
+        this.io.to('users').emit(event, data);
+        break;
+      case 'routeadmins':
+        this.io.to('routeadmins').emit(event, data);
+        break;
+      case 'customer_service':
+        this.io.to('customer_service').emit(event, data);
+        break;
+      case 'all':
+      default:
+        this.io.to('all_users').emit(event, data);
+        break;
+    }
   }
 }
 
