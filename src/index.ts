@@ -41,6 +41,8 @@ import paymentSimulationRoutes from './routes/paymentSimulationRoutes';
 import fleetRoutes from './routes/fleetRoutes';  // ← ADD THIS LINE
 import csRoutes from './routes/csRoutes';  // ⭐ NEW - Customer Service Routes
 import weatherRoutes from './routes/weatherRoutes';  // ⭐ ADD THIS LINE
+import routeAdminRoutes from './routes/routeAdminRoutes';
+
 
 // Import middleware
 import { notFound, errorHandler } from './middleware/errorMiddleware';
@@ -372,6 +374,9 @@ app.use('/api/weather', weatherRoutes);
 // Error handling middleware
 app.use(notFound);
 app.use(errorHandler);
+
+app.use('/api/route-admin', routeAdminRoutes);
+
 
 // Global error handler for uncaught exceptions
 process.on('uncaughtException', (error) => {
