@@ -11,12 +11,13 @@ export interface IRouteAssignment extends Document {
   unassignedAt?: Date;
   unassignedBy?: mongoose.Types.ObjectId;
   unassignReason?: string;
-  schedules?: [{
+  // Fixed: Changed from tuple to array type
+  schedules?: {
     startTime: string;
     endTime: string;
     daysOfWeek: string[];
     isActive: boolean;
-  }];
+  }[];
   performance: {
     totalTrips: number;
     completedTrips: number;
@@ -72,6 +73,7 @@ const RouteAssignmentSchema = new Schema<IRouteAssignment>(
     unassignReason: {
       type: String
     },
+    // Fixed: Changed from tuple syntax to proper array schema
     schedules: [{
       startTime: { 
         type: String,
@@ -183,7 +185,7 @@ RouteAssignmentSchema.statics.getAssignmentsByRoute = function(routeId: mongoose
     isActive: true 
   })
   .populate('vehicleId', 'vehicleNumber vehicleType status')
-  .populate('fleetId', 'companyName contactNumber')
+  .populate('fleetId', 'companyName phone') // Changed from contactNumber to phone
   .sort({ assignedAt: -1 });
 };
 
