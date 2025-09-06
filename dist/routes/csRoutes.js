@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-// src/routes/csRoutes.ts - FIXED VERSION
+// src/routes/csRoutes.ts - UPDATED WITH FEEDBACK ROUTE
 const express_1 = __importDefault(require("express"));
 const authMiddleware_1 = require("../middleware/authMiddleware");
 const adminMiddleware_1 = require("../middleware/adminMiddleware");
@@ -60,7 +60,9 @@ router.get('/chat/sessions/queue', authMiddleware_1.protect, activityLogger_1.lo
 // ============================================================================
 router.post('/chat/sessions', (0, asyncHandler_1.default)(chatController.startChat));
 router.post('/chat/sessions/:id/messages', (0, asyncHandler_1.default)(chatController.sendMessage));
-router.get('/chat/sessions/:id', (0, asyncHandler_1.default)(chatController.getChatById)); // Now this won't conflict
+router.get('/chat/sessions/:id', (0, asyncHandler_1.default)(chatController.getChatById));
+// NEW: Customer feedback route (must be public so customers can rate without auth)
+router.post('/chat/sessions/:id/feedback', (0, asyncHandler_1.default)(chatController.submitFeedback));
 router.get('/knowledge/search', (0, asyncHandler_1.default)(knowledgeController.searchArticles));
 router.get('/knowledge/:id', (0, asyncHandler_1.default)(knowledgeController.getArticleById));
 router.post('/knowledge/:id/rate', (0, asyncHandler_1.default)(knowledgeController.rateArticle));

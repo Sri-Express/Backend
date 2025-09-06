@@ -713,20 +713,28 @@ export const sendEmergencyBroadcast = async (req: Request, res: Response): Promi
       case 'system_admins':
         recipientQuery.role = 'system_admin';
         break;
+      case 'fleet_operators':
       case 'fleet_managers':
-        recipientQuery.role = 'company_admin'; // Fleet managers use company_admin role
+        recipientQuery.role = 'company_admin'; // Fleet managers/operators use company_admin role
         break;
+      case 'passengers':
       case 'users':
         recipientQuery.role = 'client';
         break;
+      case 'route_admins':
       case 'routeadmins':
-        // Not implemented - skip for now
-        recipientCount = 0;
-        res.status(501).json({ 
-          message: 'Route admins broadcast not implemented yet',
-          success: false 
-        });
-        return;
+        recipientQuery.role = 'route_admin';
+        break;
+      case 'customer_service':
+        recipientQuery.role = 'customer_service';
+        break;
+      case 'staff_only':
+        recipientQuery.role = { $in: ['system_admin', 'company_admin', 'route_admin', 'customer_service'] };
+        break;
+      case 'emergency_responders':
+        // Emergency responders are typically system and route admins
+        recipientQuery.role = { $in: ['system_admin', 'route_admin'] };
+        break;
       case 'all':
       default:
         // No additional filter for all users

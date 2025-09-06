@@ -16,7 +16,7 @@ const sendSMS = async (phoneNumber, message) => {
 };
 // Push Notification Service (mock implementation)
 const sendPushNotification = async (userId, title, body, data) => {
-    console.log(`🔔 Push notification to user ${userId}: ${title} - ${body}`);
+    console.log(`📲 Push notification to user ${userId}: ${title} - ${body}`);
     // Integrate with actual push service like Firebase, OneSignal, etc.
 };
 // @desc    Get emergency dashboard data with real-time integration
@@ -367,7 +367,7 @@ const createEmergencyAlert = async (req, res) => {
                 });
             });
             await Promise.all(pushPromises);
-            console.log(`🔔 Push notifications sent to ${targetUsers.length} users`);
+            console.log(`📲 Push notifications sent to ${targetUsers.length} users`);
         }
         catch (pushError) {
             console.error('Push notification failed:', pushError);
@@ -588,12 +588,12 @@ const resolveEmergency = async (req, res) => {
     }
 };
 exports.resolveEmergency = resolveEmergency;
-// @desc    Send system-wide emergency broadcast with real-time delivery
+// @desc    Send system-wide emergency broadcast with updated recipient mapping
 // @route   POST /api/admin/emergency/broadcast
 // @access  Private (System Admin)
 const sendEmergencyBroadcast = async (req, res) => {
     try {
-        const { message, recipients = 'all', // 'all', 'admins', 'users', 'drivers'
+        const { message, recipients = 'all', // 'all', 'system_admins', 'fleet_managers', 'users'
         method = 'system', // 'system', 'email', 'sms', 'push'
         priority = 'high', relatedIncident } = req.body;
         // Validate required fields
@@ -601,19 +601,27 @@ const sendEmergencyBroadcast = async (req, res) => {
             res.status(400).json({ message: 'Broadcast message is required' });
             return;
         }
-        // Get recipient count based on type
+        // Get recipient count based on updated mapping
         let recipientCount = 0;
         let recipientQuery = { isActive: true };
         switch (recipients) {
-            case 'admins':
-                recipientQuery.role = { $in: ['system_admin', 'route_admin', 'company_admin'] };
+            case 'system_admins':
+                recipientQuery.role = 'system_admin';
                 break;
-            case 'drivers':
-                recipientQuery.role = 'route_admin';
+            case 'fleet_managers':
+                recipientQuery.role = 'company_admin'; // Fleet managers use company_admin role
                 break;
             case 'users':
                 recipientQuery.role = 'client';
                 break;
+            case 'routeadmins':
+                // Not implemented - skip for now
+                recipientCount = 0;
+                res.status(501).json({
+                    message: 'Route admins broadcast not implemented yet',
+                    success: false
+                });
+                return;
             case 'all':
             default:
                 // No additional filter for all users
@@ -677,7 +685,7 @@ const sendEmergencyBroadcast = async (req, res) => {
         // ====== REAL-TIME BROADCAST DELIVERY ======
         try {
             const realTimeService = (0, realTimeEmergencyService_1.getRealTimeEmergencyService)();
-            // Send real-time broadcast
+            // Send real-time broadcast with updated recipient mapping
             await realTimeService.sendSystemBroadcast(message, priority, [recipients]);
             console.log(`📡 Real-time broadcast delivered to ${recipients} (${recipientCount} users)`);
         }

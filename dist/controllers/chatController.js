@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getChatStats = exports.getWaitingQueue = exports.markAsRead = exports.endChat = exports.transferChat = exports.assignChat = exports.sendMessage = exports.startChat = exports.getChatById = exports.getChatSessions = void 0;
+exports.submitFeedback = exports.getChatStats = exports.getWaitingQueue = exports.markAsRead = exports.endChat = exports.transferChat = exports.assignChat = exports.sendMessage = exports.startChat = exports.getChatById = exports.getChatSessions = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 const Chat_1 = __importDefault(require("../models/Chat"));
 const User_1 = __importDefault(require("../models/User"));
@@ -358,29 +358,287 @@ const getWaitingQueue = async (req, res) => {
     }
 };
 exports.getWaitingQueue = getWaitingQueue;
-// Get chat statistics
+// Enhanced getChatStats function for chatController.ts
 const getChatStats = async (req, res) => {
+    var _a;
     try {
-        const { period = '30', agentId } = req.query;
+        const { period = '1' } = req.query;
         const days = parseInt(period);
-        const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-        const matchQuery = { startedAt: { $gte: startDate }, isActive: true };
-        if (agentId)
-            matchQuery.assignedAgent = new mongoose_1.default.Types.ObjectId(agentId);
-        const [statusStats, channelStats, responseTime, satisfaction] = await Promise.all([
-            Chat_1.default.aggregate([{ $match: matchQuery }, { $group: { _id: '$status', count: { $sum: 1 }, avgDuration: { $avg: '$duration' } } }]),
-            Chat_1.default.aggregate([{ $match: matchQuery }, { $group: { _id: '$channel', count: { $sum: 1 } } }]),
-            Chat_1.default.aggregate([{ $match: { ...matchQuery, status: 'ended' } }, { $group: { _id: null, avgResponseTime: { $avg: '$sessionMetrics.responseTime.averageAgent' }, avgDuration: { $avg: '$duration' } } }]),
-            Chat_1.default.aggregate([{ $match: { ...matchQuery, 'feedback.rating': { $exists: true } } }, { $group: { _id: '$feedback.rating', count: { $sum: 1 } } }])
+        const startDate = new Date();
+        startDate.setHours(0, 0, 0, 0);
+        if (days > 1) {
+            startDate.setDate(startDate.getDate() - (days - 1));
+        }
+        const endDate = new Date();
+        endDate.setHours(23, 59, 59, 999);
+        // Comprehensive analytics queries
+        const [activeCount, waitingCount, endedTodayCount, totalTodayCount, resolvedTodayCount, avgWaitTimeResult, avgResolutionTimeResult, satisfactionResult, hourlyDistribution, agentPerformance] = await Promise.all([
+            // Current active chats
+            Chat_1.default.countDocuments({
+                status: 'active',
+                isActive: true
+            }),
+            // Current waiting queue
+            Chat_1.default.countDocuments({
+                status: 'waiting',
+                isActive: true
+            }),
+            // Ended today (includes resolved, closed, etc)
+            Chat_1.default.countDocuments({
+                status: 'ended',
+                isActive: true,
+                startedAt: { $gte: startDate, $lte: endDate }
+            }),
+            // Total sessions today
+            Chat_1.default.countDocuments({
+                isActive: true,
+                startedAt: { $gte: startDate, $lte: endDate }
+            }),
+            // Successfully resolved today (ended with positive outcome)
+            Chat_1.default.countDocuments({
+                status: 'ended',
+                isActive: true,
+                startedAt: { $gte: startDate, $lte: endDate },
+                duration: { $exists: true, $gt: 0 }
+            }),
+            // Average wait time for current waiting sessions
+            Chat_1.default.aggregate([
+                {
+                    $match: {
+                        status: 'waiting',
+                        isActive: true
+                    }
+                },
+                {
+                    $addFields: {
+                        waitTimeMinutes: {
+                            $divide: [
+                                { $subtract: [new Date(), '$startedAt'] },
+                                60000
+                            ]
+                        }
+                    }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        avgWaitTime: { $avg: '$waitTimeMinutes' },
+                        maxWaitTime: { $max: '$waitTimeMinutes' },
+                        totalWaiting: { $sum: 1 }
+                    }
+                }
+            ]),
+            // Average resolution time from ended chats today
+            Chat_1.default.aggregate([
+                {
+                    $match: {
+                        status: 'ended',
+                        isActive: true,
+                        startedAt: { $gte: startDate, $lte: endDate },
+                        duration: { $gt: 0 }
+                    }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        avgResolutionTime: { $avg: '$duration' },
+                        totalResolved: { $sum: 1 }
+                    }
+                }
+            ]),
+            // Satisfaction metrics with detailed breakdown
+            Chat_1.default.aggregate([
+                {
+                    $match: {
+                        'feedback.rating': { $exists: true },
+                        isActive: true,
+                        startedAt: { $gte: startDate, $lte: endDate }
+                    }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        avgRating: { $avg: '$feedback.rating' },
+                        totalFeedback: { $sum: 1 },
+                        ratings: {
+                            $push: '$feedback.rating'
+                        }
+                    }
+                },
+                {
+                    $addFields: {
+                        satisfactionRate: {
+                            $multiply: [
+                                { $divide: ['$avgRating', 5] },
+                                100
+                            ]
+                        },
+                        positiveRatings: {
+                            $size: {
+                                $filter: {
+                                    input: '$ratings',
+                                    as: 'rating',
+                                    cond: { $gte: ['$$rating', 4] }
+                                }
+                            }
+                        }
+                    }
+                }
+            ]),
+            // Hourly distribution for peak time analysis
+            Chat_1.default.aggregate([
+                {
+                    $match: {
+                        isActive: true,
+                        startedAt: { $gte: startDate, $lte: endDate }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { $hour: '$startedAt' },
+                        count: { $sum: 1 }
+                    }
+                },
+                {
+                    $sort: { count: -1 }
+                },
+                {
+                    $limit: 3
+                }
+            ]),
+            // Agent performance summary
+            Chat_1.default.aggregate([
+                {
+                    $match: {
+                        status: 'ended',
+                        isActive: true,
+                        startedAt: { $gte: startDate, $lte: endDate },
+                        assignedAgent: { $exists: true }
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$assignedAgent',
+                        totalChats: { $sum: 1 },
+                        avgDuration: { $avg: '$duration' },
+                        avgRating: { $avg: '$feedback.rating' }
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'users',
+                        localField: '_id',
+                        foreignField: '_id',
+                        as: 'agent'
+                    }
+                }
+            ])
         ]);
-        res.json({ success: true, data: { status: statusStats, channels: channelStats, responseTime: responseTime[0] || { avgResponseTime: 0, avgDuration: 0 }, satisfaction, period: days } });
+        // Calculate enhanced metrics
+        const waitStats = avgWaitTimeResult[0] || {};
+        const resolutionStats = avgResolutionTimeResult[0] || {};
+        const satisfactionStats = satisfactionResult[0] || {};
+        // Format response with comprehensive metrics
+        const stats = {
+            // Core metrics (existing)
+            active: activeCount,
+            waiting: waitingCount,
+            ended: endedTodayCount,
+            total: totalTodayCount,
+            // Enhanced metrics
+            resolved: resolvedTodayCount,
+            resolutionRate: totalTodayCount > 0 ? Math.round((resolvedTodayCount / totalTodayCount) * 100) : 0,
+            // Time metrics
+            avgWaitTime: waitStats.avgWaitTime ? `${Math.round(waitStats.avgWaitTime)}m` : '0m',
+            maxWaitTime: waitStats.maxWaitTime ? `${Math.round(waitStats.maxWaitTime)}m` : '0m',
+            avgResolutionTime: resolutionStats.avgResolutionTime ?
+                `${Math.round(resolutionStats.avgResolutionTime / 60)}m` : '0m',
+            // Satisfaction metrics
+            satisfactionRate: satisfactionStats.satisfactionRate ?
+                `${Math.round(satisfactionStats.satisfactionRate)}%` : '0%',
+            avgRating: satisfactionStats.avgRating ?
+                Math.round(satisfactionStats.avgRating * 10) / 10 : 0,
+            totalFeedback: satisfactionStats.totalFeedback || 0,
+            positiveRatings: satisfactionStats.positiveRatings || 0,
+            // Operational insights
+            peakHours: hourlyDistribution.slice(0, 3).map(h => `${h._id}:00`),
+            activeAgents: agentPerformance.length,
+            // Health indicators
+            queueHealth: waitingCount > 10 ? 'high-load' : waitingCount > 5 ? 'moderate' : 'healthy',
+            responseEfficiency: satisfactionStats.avgRating >= 4 ? 'excellent' :
+                satisfactionStats.avgRating >= 3 ? 'good' : 'needs-improvement'
+        };
+        console.log('Enhanced chat stats:', stats);
+        res.json({
+            success: true,
+            data: stats,
+            period: days,
+            timestamp: new Date().toISOString(),
+            meta: {
+                dataPoints: totalTodayCount,
+                feedbackCoverage: totalTodayCount > 0 ?
+                    Math.round((satisfactionStats.totalFeedback / totalTodayCount) * 100) : 0,
+                peakHour: ((_a = hourlyDistribution[0]) === null || _a === void 0 ? void 0 : _a._id) || null
+            }
+        });
     }
     catch (error) {
-        console.error('Chat stats error:', error);
-        res.status(500).json({ success: false, message: 'Failed to get chat statistics', error: error instanceof Error ? error.message : 'Unknown error' });
+        console.error('Enhanced chat stats error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get chat statistics',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
     }
 };
 exports.getChatStats = getChatStats;
+// New endpoint for submitting customer feedback
+const submitFeedback = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { rating, comment } = req.body;
+        if (!rating || rating < 1 || rating > 5) {
+            return res.status(400).json({
+                success: false,
+                message: 'Rating must be between 1 and 5'
+            });
+        }
+        const chat = await Chat_1.default.findOne({
+            $or: [
+                { _id: mongoose_1.default.Types.ObjectId.isValid(id) ? id : null },
+                { sessionId: id }
+            ],
+            isActive: true
+        });
+        if (!chat) {
+            return res.status(404).json({
+                success: false,
+                message: 'Chat session not found'
+            });
+        }
+        // Update feedback
+        chat.feedback = {
+            rating: parseInt(rating),
+            comment: comment || '',
+            submittedAt: new Date()
+        };
+        await chat.save();
+        res.json({
+            success: true,
+            message: 'Feedback submitted successfully',
+            data: { rating, comment }
+        });
+    }
+    catch (error) {
+        console.error('Submit feedback error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to submit feedback',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+};
+exports.submitFeedback = submitFeedback;
 // Helper function to calculate queue position
 const calculateQueuePosition = async () => {
     const waitingCount = await Chat_1.default.countDocuments({ status: 'waiting', isActive: true });

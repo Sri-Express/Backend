@@ -65,11 +65,29 @@ class RealTimeEmergencyService {
         }
         this.userSockets.get(user._id.toString()).add(socket.id);
         console.log(`🔌 User connected: ${user.name} (${user.role}) - Socket: ${socket.id}`);
-        // Join role-based rooms
+        // Join role-based rooms with updated mapping
         socket.join(`role:${user.role}`);
         socket.join('all_users');
-        if (user.role.includes('admin')) {
-            socket.join('admins');
+        // Join specific groups based on role
+        switch (user.role) {
+            case 'system_admin':
+                socket.join('system_admins');
+                socket.join('admins');
+                break;
+            case 'company_admin':
+                socket.join('fleet_managers');
+                socket.join('admins');
+                break;
+            case 'route_admin':
+                socket.join('routeadmins'); // For future implementation
+                socket.join('admins');
+                break;
+            case 'customer_service':
+                socket.join('customer_service');
+                break;
+            case 'client':
+                socket.join('users');
+                break;
         }
         // Send welcome message and current stats
         socket.emit('connected', {
@@ -113,7 +131,7 @@ class RealTimeEmergencyService {
     handleDisconnection(socket) {
         const connectedUser = this.connectedUsers.get(socket.id);
         if (connectedUser) {
-            console.log(`❌ User disconnected: ${connectedUser.name} - Socket: ${socket.id}`);
+            console.log(`⌐ User disconnected: ${connectedUser.name} - Socket: ${socket.id}`);
             // Remove from user sockets
             const userSockets = this.userSockets.get(connectedUser.userId);
             if (userSockets) {
@@ -172,18 +190,27 @@ class RealTimeEmergencyService {
     // Public methods for sending notifications
     async broadcastEmergencyAlert(notification) {
         console.log(`🚨 Broadcasting emergency alert: ${notification.title}`);
-        // Determine target rooms based on recipients
+        // Determine target rooms based on updated recipients mapping
         const rooms = [];
         notification.recipients.forEach(recipient => {
             switch (recipient) {
                 case 'all':
                     rooms.push('all_users');
                     break;
-                case 'admins':
-                    rooms.push('admins');
+                case 'system_admins':
+                    rooms.push('system_admins');
+                    break;
+                case 'fleet_managers':
+                    rooms.push('fleet_managers');
                     break;
                 case 'users':
-                    rooms.push('role:client');
+                    rooms.push('users');
+                    break;
+                case 'routeadmins':
+                    rooms.push('routeadmins'); // For future implementation
+                    break;
+                case 'customer_service':
+                    rooms.push('customer_service');
                     break;
                 default:
                     if (recipient.startsWith('role:')) {
@@ -216,7 +243,7 @@ class RealTimeEmergencyService {
             priority: emergency.priority,
             emergency: emergency,
             timestamp: new Date(),
-            recipients: emergency.priority === 'low' ? ['admins'] : ['all']
+            recipients: emergency.priority === 'low' ? ['system_admins'] : ['all']
         };
         await this.broadcastEmergencyAlert(notification);
         // Update dashboard stats for all connected users
@@ -231,7 +258,7 @@ class RealTimeEmergencyService {
             priority: 'medium',
             emergency: emergency,
             timestamp: new Date(),
-            recipients: ['admins']
+            recipients: ['system_admins']
         };
         await this.broadcastEmergencyAlert(notification);
         // Notify users subscribed to this specific emergency
@@ -322,6 +349,30 @@ class RealTimeEmergencyService {
     }
     async sendToRole(role, event, data) {
         this.io.to(`role:${role}`).emit(event, data);
+    }
+    // Updated method to send to specific groups based on new recipient mapping
+    async sendToRecipientGroup(group, event, data) {
+        switch (group) {
+            case 'system_admins':
+                this.io.to('system_admins').emit(event, data);
+                break;
+            case 'fleet_managers':
+                this.io.to('fleet_managers').emit(event, data);
+                break;
+            case 'users':
+                this.io.to('users').emit(event, data);
+                break;
+            case 'routeadmins':
+                this.io.to('routeadmins').emit(event, data);
+                break;
+            case 'customer_service':
+                this.io.to('customer_service').emit(event, data);
+                break;
+            case 'all':
+            default:
+                this.io.to('all_users').emit(event, data);
+                break;
+        }
     }
 }
 // Singleton instance

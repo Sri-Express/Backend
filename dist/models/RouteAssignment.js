@@ -75,6 +75,7 @@ const RouteAssignmentSchema = new mongoose_1.Schema({
     unassignReason: {
         type: String
     },
+    // Fixed: Changed from tuple syntax to proper array schema
     schedules: [{
             startTime: {
                 type: String,
@@ -175,7 +176,7 @@ RouteAssignmentSchema.statics.getAssignmentsByRoute = function (routeId) {
         isActive: true
     })
         .populate('vehicleId', 'vehicleNumber vehicleType status')
-        .populate('fleetId', 'companyName contactNumber')
+        .populate('fleetId', 'companyName phone') // Changed from contactNumber to phone
         .sort({ assignedAt: -1 });
 };
 RouteAssignmentSchema.statics.getVehicleAssignments = function (vehicleId) {
