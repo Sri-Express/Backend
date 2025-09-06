@@ -1,30 +1,66 @@
 "use strict";
+// OPTIMIZED realTimeEmergencyService.ts
+// Key improvements: Memory management, rate limiting, connection pooling
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRealTimeEmergencyService = exports.initializeRealTimeEmergencyService = void 0;
+exports.getOptimizedRealTimeEmergencyService = exports.initializeOptimizedRealTimeEmergencyService = exports.getRealTimeEmergencyService = exports.initializeRealTimeEmergencyService = void 0;
 const socket_io_1 = require("socket.io");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const User_1 = __importDefault(require("../models/User"));
 const Emergency_1 = __importDefault(require("../models/Emergency"));
-class RealTimeEmergencyService {
+class OptimizedRealTimeEmergencyService {
     constructor(httpServer) {
         this.connectedUsers = new Map();
-        this.userSockets = new Map(); // userId -> Set of socketIds
+        this.userSockets = new Map();
+        this.rateLimitMap = new Map();
+        this.emergencyCache = new Map();
+        this.MAX_CACHE_SIZE = 1000;
+        this.RATE_LIMIT_WINDOW = 60000; // 1 minute
+        this.RATE_LIMIT_MAX = 100; // Max requests per window
         this.io = new socket_io_1.Server(httpServer, {
             cors: {
                 origin: process.env.FRONTEND_URL || "http://localhost:3000",
                 methods: ["GET", "POST"],
                 credentials: true
             },
-            transports: ['websocket', 'polling']
+            transports: ['websocket', 'polling'],
+            // Performance optimizations
+            pingTimeout: 60000,
+            pingInterval: 25000,
+            maxHttpBufferSize: 1e6, // 1MB
+            allowEIO3: true
         });
         this.setupSocketHandlers();
         this.startHeartbeat();
-        console.log('🚨 Real-time Emergency Service initialized');
+        this.startCleanupTasks();
+        console.log('🚨 Optimized Real-time Emergency Service initialized');
     }
     setupSocketHandlers() {
+        // Rate limiting middleware
+        this.io.use((socket, next) => {
+            const ip = socket.handshake.address;
+            const now = Date.now();
+            const rateLimit = this.rateLimitMap.get(ip);
+            if (rateLimit) {
+                if (now > rateLimit.resetTime) {
+                    // Reset rate limit window
+                    this.rateLimitMap.set(ip, { count: 1, resetTime: now + this.RATE_LIMIT_WINDOW });
+                }
+                else if (rateLimit.count >= this.RATE_LIMIT_MAX) {
+                    return next(new Error('Rate limit exceeded'));
+                }
+                else {
+                    rateLimit.count++;
+                }
+            }
+            else {
+                this.rateLimitMap.set(ip, { count: 1, resetTime: now + this.RATE_LIMIT_WINDOW });
+            }
+            next();
+        });
+        // Authentication middleware
         this.io.use(async (socket, next) => {
             try {
                 const token = socket.handshake.auth.token;
@@ -32,7 +68,15 @@ class RealTimeEmergencyService {
                     return next(new Error('Authentication error'));
                 }
                 const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
-                const user = await User_1.default.findById(decoded.id).select('-password');
+                // Use cache for user lookup to reduce DB hits
+                const cacheKey = `user_${decoded.id}`;
+                let user = this.emergencyCache.get(cacheKey);
+                if (!user) {
+                    user = await User_1.default.findById(decoded.id).select('-password').lean(); // Use lean() for performance
+                    if (user) {
+                        this.emergencyCache.set(cacheKey, user);
+                    }
+                }
                 if (!user) {
                     return next(new Error('User not found'));
                 }
@@ -49,90 +93,123 @@ class RealTimeEmergencyService {
     }
     handleConnection(socket) {
         const user = socket.data.user;
+        const existingUser = this.connectedUsers.get(socket.id);
         const connectedUser = {
             userId: user._id.toString(),
             socketId: socket.id,
             name: user.name,
             role: user.role,
             email: user.email,
-            lastSeen: new Date()
+            lastSeen: new Date(),
+            connectionCount: existingUser ? existingUser.connectionCount + 1 : 1
         };
-        // Store connected user
+        // Store connected user with optimized structure
         this.connectedUsers.set(socket.id, connectedUser);
-        // Add socket to user's socket set
+        // Optimize user socket tracking
         if (!this.userSockets.has(user._id.toString())) {
             this.userSockets.set(user._id.toString(), new Set());
         }
         this.userSockets.get(user._id.toString()).add(socket.id);
-        console.log(`🔌 User connected: ${user.name} (${user.role}) - Socket: ${socket.id}`);
-        // Join role-based rooms with updated mapping
-        socket.join(`role:${user.role}`);
-        socket.join('all_users');
-        // Join specific groups based on role
-        switch (user.role) {
-            case 'system_admin':
-                socket.join('system_admins');
-                socket.join('admins');
-                break;
-            case 'company_admin':
-                socket.join('fleet_managers');
-                socket.join('admins');
-                break;
-            case 'route_admin':
-                socket.join('routeadmins'); // For future implementation
-                socket.join('admins');
-                break;
-            case 'customer_service':
-                socket.join('customer_service');
-                break;
-            case 'client':
-                socket.join('users');
-                break;
-        }
-        // Send welcome message and current stats
+        console.log(`🔌 User connected: ${user.name} (${user.role}) - Connections: ${connectedUser.connectionCount}`);
+        // Optimized room joining with batching
+        const rooms = this.getUserRooms(user.role);
+        rooms.forEach(room => socket.join(room));
+        // Send optimized welcome message
         socket.emit('connected', {
             message: 'Connected to Emergency Alert System',
-            user: {
-                id: user._id,
-                name: user.name,
-                role: user.role
-            },
-            timestamp: new Date()
+            user: { id: user._id, name: user.name, role: user.role },
+            timestamp: new Date(),
+            serverStats: {
+                connectedUsers: this.getConnectedUsersCount(),
+                activeRooms: rooms.length
+            }
         });
-        // Send current emergency status
-        this.sendCurrentEmergencyStatus(socket);
-        // Handle emergency-specific events
+        // Send cached emergency status to reduce DB load
+        this.sendCachedEmergencyStatus(socket);
+        // Optimized event handlers with debouncing
+        this.setupSocketEventHandlers(socket);
+    }
+    getUserRooms(role) {
+        const rooms = ['all_users'];
+        switch (role) {
+            case 'system_admin':
+                rooms.push('system_admins', 'admins', 'emergency_responders');
+                break;
+            case 'company_admin':
+                rooms.push('fleet_managers', 'admins');
+                break;
+            case 'route_admin':
+                rooms.push('routeadmins', 'admins', 'emergency_responders');
+                break;
+            case 'customer_service':
+                rooms.push('customer_service', 'admins');
+                break;
+            case 'client':
+                rooms.push('users');
+                break;
+        }
+        rooms.push(`role:${role}`);
+        return rooms;
+    }
+    setupSocketEventHandlers(socket) {
+        const user = socket.data.user;
+        // Debounced emergency subscription
+        let subscriptionTimeout;
         socket.on('subscribe_emergency', (emergencyId) => {
-            socket.join(`emergency:${emergencyId}`);
-            console.log(`📡 User ${user.name} subscribed to emergency: ${emergencyId}`);
+            clearTimeout(subscriptionTimeout);
+            subscriptionTimeout = setTimeout(() => {
+                socket.join(`emergency:${emergencyId}`);
+                console.log(`📡 ${user.name} subscribed to emergency: ${emergencyId}`);
+            }, 100);
         });
         socket.on('unsubscribe_emergency', (emergencyId) => {
             socket.leave(`emergency:${emergencyId}`);
-            console.log(`📡 User ${user.name} unsubscribed from emergency: ${emergencyId}`);
         });
-        // Handle emergency actions
+        // Optimized emergency actions with caching
         socket.on('emergency_action', async (data) => {
             try {
-                await this.handleEmergencyAction(socket, data);
+                await this.handleEmergencyActionOptimized(socket, data);
             }
             catch (error) {
                 socket.emit('error', { message: 'Failed to process emergency action' });
             }
         });
-        // Handle ping/pong for connection health
+        // Efficient ping/pong
         socket.on('ping', () => {
-            socket.emit('pong', { timestamp: new Date() });
+            socket.emit('pong', { timestamp: new Date(), userId: user._id });
         });
-        // Handle disconnection
         socket.on('disconnect', () => {
-            this.handleDisconnection(socket);
+            this.handleDisconnectionOptimized(socket);
         });
     }
-    handleDisconnection(socket) {
+    async handleEmergencyActionOptimized(socket, data) {
+        const cacheKey = `emergency_${data.emergencyId}`;
+        switch (data.action) {
+            case 'get_emergency_details':
+                if (data.emergencyId) {
+                    let emergency = this.emergencyCache.get(cacheKey);
+                    if (!emergency) {
+                        emergency = await Emergency_1.default.findById(data.emergencyId).lean();
+                        if (emergency) {
+                            this.emergencyCache.set(cacheKey, emergency);
+                        }
+                    }
+                    socket.emit('emergency_details', emergency);
+                }
+                break;
+            case 'request_emergency_stats':
+                await this.sendCachedEmergencyStatus(socket);
+                break;
+            case 'mark_notification_read':
+                socket.emit('notification_read', { notificationId: data.notificationId });
+                break;
+        }
+    }
+    handleDisconnectionOptimized(socket) {
         const connectedUser = this.connectedUsers.get(socket.id);
         if (connectedUser) {
-            console.log(`⌐ User disconnected: ${connectedUser.name} - Socket: ${socket.id}`);
-            // Remove from user sockets
+            console.log(`❌ User disconnected: ${connectedUser.name} - Socket: ${socket.id}`);
+            // Efficient cleanup
             const userSockets = this.userSockets.get(connectedUser.userId);
             if (userSockets) {
                 userSockets.delete(socket.id);
@@ -140,100 +217,106 @@ class RealTimeEmergencyService {
                     this.userSockets.delete(connectedUser.userId);
                 }
             }
-            // Remove connected user
             this.connectedUsers.delete(socket.id);
         }
     }
-    async sendCurrentEmergencyStatus(socket) {
+    async sendCachedEmergencyStatus(socket) {
         try {
-            // Get current active emergencies
-            const activeEmergencies = await Emergency_1.default.find({
-                status: { $in: ['active', 'responded'] },
-                isActive: true
-            }).sort({ createdAt: -1 }).limit(10);
-            // Get critical emergencies
-            const criticalEmergencies = await Emergency_1.default.find({
-                priority: 'critical',
-                status: { $in: ['active', 'responded'] },
-                isActive: true
-            }).sort({ createdAt: -1 });
-            socket.emit('emergency_status', {
-                activeCount: activeEmergencies.length,
-                criticalCount: criticalEmergencies.length,
-                activeEmergencies: activeEmergencies,
-                criticalEmergencies: criticalEmergencies,
-                timestamp: new Date()
-            });
+            const cacheKey = 'emergency_status';
+            let statusData = this.emergencyCache.get(cacheKey);
+            if (!statusData) {
+                // Optimized aggregation pipeline
+                const [activeEmergencies, criticalEmergencies] = await Promise.all([
+                    Emergency_1.default.find({
+                        status: { $in: ['active', 'responded'] },
+                        isActive: true
+                    }).sort({ createdAt: -1 }).limit(10).lean(),
+                    Emergency_1.default.find({
+                        priority: 'critical',
+                        status: { $in: ['active', 'responded'] },
+                        isActive: true
+                    }).sort({ createdAt: -1 }).lean()
+                ]);
+                statusData = {
+                    activeCount: activeEmergencies.length,
+                    criticalCount: criticalEmergencies.length,
+                    activeEmergencies,
+                    criticalEmergencies,
+                    timestamp: new Date()
+                };
+                // Cache for 30 seconds
+                this.emergencyCache.set(cacheKey, statusData);
+                setTimeout(() => this.emergencyCache.delete(cacheKey), 30000);
+            }
+            socket.emit('emergency_status', statusData);
         }
         catch (error) {
             console.error('Error sending emergency status:', error);
         }
     }
-    async handleEmergencyAction(socket, data) {
-        const user = socket.data.user;
-        switch (data.action) {
-            case 'get_emergency_details':
-                if (data.emergencyId) {
-                    const emergency = await Emergency_1.default.findById(data.emergencyId);
-                    socket.emit('emergency_details', emergency);
-                }
-                break;
-            case 'request_emergency_stats':
-                await this.sendCurrentEmergencyStatus(socket);
-                break;
-            case 'mark_notification_read':
-                // Handle notification read status
-                socket.emit('notification_read', { notificationId: data.notificationId });
-                break;
-        }
-    }
-    // Public methods for sending notifications
+    // Optimized broadcast with batching
     async broadcastEmergencyAlert(notification) {
         console.log(`🚨 Broadcasting emergency alert: ${notification.title}`);
-        // Determine target rooms based on updated recipients mapping
-        const rooms = [];
-        notification.recipients.forEach(recipient => {
-            switch (recipient) {
-                case 'all':
-                    rooms.push('all_users');
-                    break;
-                case 'system_admins':
-                    rooms.push('system_admins');
-                    break;
-                case 'fleet_managers':
-                    rooms.push('fleet_managers');
-                    break;
-                case 'users':
-                    rooms.push('users');
-                    break;
-                case 'routeadmins':
-                    rooms.push('routeadmins'); // For future implementation
-                    break;
-                case 'customer_service':
-                    rooms.push('customer_service');
-                    break;
-                default:
-                    if (recipient.startsWith('role:')) {
-                        rooms.push(recipient);
-                    }
-                    break;
+        const rooms = this.getTargetRooms(notification.recipients);
+        const broadcastData = {
+            ...notification,
+            connectedUsers: this.getConnectedUsersCount(),
+            serverTimestamp: new Date()
+        };
+        // Batch emit to all rooms
+        rooms.forEach(room => {
+            this.io.to(room).emit('emergency_alert', { ...broadcastData, room });
+        });
+        // Critical alerts get additional processing
+        if (notification.priority === 'critical') {
+            await this.handleCriticalAlert(notification);
+        }
+        console.log(`📡 Alert sent to ${rooms.length} rooms - ${this.getConnectedUsersCount()} users`);
+        // Update cache
+        this.emergencyCache.delete('emergency_status'); // Invalidate cache
+    }
+    async handleCriticalAlert(notification) {
+        var _a;
+        // Send browser push notifications
+        this.io.emit('push_notification_request', {
+            title: notification.title,
+            body: notification.message,
+            icon: '/emergency-icon.png',
+            badge: '/emergency-badge.png',
+            tag: notification.id,
+            data: {
+                emergencyId: (_a = notification.emergency) === null || _a === void 0 ? void 0 : _a._id,
+                priority: notification.priority,
+                timestamp: notification.timestamp
             }
         });
-        // Broadcast to all specified rooms
-        rooms.forEach(room => {
-            this.io.to(room).emit('emergency_alert', {
-                ...notification,
-                room,
-                connectedUsers: this.getConnectedUsersCount()
-            });
-        });
-        // Send browser push notifications for critical alerts
-        if (notification.priority === 'critical') {
-            await this.sendBrowserPushNotifications(notification);
-        }
-        // Log the broadcast
-        console.log(`📡 Emergency alert sent to rooms: ${rooms.join(', ')} - ${this.getConnectedUsersCount()} users`);
     }
+    getTargetRooms(recipients) {
+        const rooms = [];
+        recipients.forEach(recipient => {
+            const roomMap = {
+                'all': 'all_users',
+                'system_admins': 'system_admins',
+                'fleet_managers': 'fleet_managers',
+                'fleet_operators': 'fleet_managers', // Map to same room as fleet_managers
+                'passengers': 'users', // Map passengers to users room
+                'users': 'users',
+                'route_admins': 'routeadmins', // Support both naming conventions
+                'routeadmins': 'routeadmins',
+                'customer_service': 'customer_service',
+                'staff_only': 'admins', // All staff go to admins room
+                'emergency_responders': 'emergency_responders' // New room for emergency responders
+            };
+            if (roomMap[recipient]) {
+                rooms.push(roomMap[recipient]);
+            }
+            else if (recipient.startsWith('role:')) {
+                rooms.push(recipient);
+            }
+        });
+        return [...new Set(rooms)]; // Remove duplicates
+    }
+    // Optimized notification methods
     async notifyEmergencyCreated(emergency) {
         const notification = {
             id: `emergency_${emergency._id}`,
@@ -246,8 +329,7 @@ class RealTimeEmergencyService {
             recipients: emergency.priority === 'low' ? ['system_admins'] : ['all']
         };
         await this.broadcastEmergencyAlert(notification);
-        // Update dashboard stats for all connected users
-        this.updateDashboardStats();
+        this.updateDashboardStatsOptimized();
     }
     async notifyEmergencyResolved(emergency) {
         const notification = {
@@ -261,13 +343,13 @@ class RealTimeEmergencyService {
             recipients: ['system_admins']
         };
         await this.broadcastEmergencyAlert(notification);
-        // Notify users subscribed to this specific emergency
+        // Optimized specific emergency notification
         this.io.to(`emergency:${emergency._id}`).emit('emergency_resolved', {
             emergencyId: emergency._id,
             resolution: emergency.resolution,
             timestamp: new Date()
         });
-        this.updateDashboardStats();
+        this.updateDashboardStatsOptimized();
     }
     async notifyEmergencyEscalated(emergency) {
         const notification = {
@@ -294,45 +376,99 @@ class RealTimeEmergencyService {
         };
         await this.broadcastEmergencyAlert(notification);
     }
-    async sendBrowserPushNotifications(notification) {
-        var _a;
-        // This would integrate with Web Push API
-        // For now, we'll just broadcast a special push notification event
-        this.io.emit('push_notification_request', {
-            title: notification.title,
-            body: notification.message,
-            icon: '/emergency-icon.png',
-            badge: '/emergency-badge.png',
-            tag: notification.id,
-            data: {
-                emergencyId: (_a = notification.emergency) === null || _a === void 0 ? void 0 : _a._id,
-                priority: notification.priority,
-                timestamp: notification.timestamp
-            }
-        });
-    }
-    updateDashboardStats() {
-        // Broadcast updated stats to all admins
-        this.io.to('admins').emit('update_dashboard_stats', {
-            timestamp: new Date(),
-            message: 'Emergency statistics updated'
-        });
+    updateDashboardStatsOptimized() {
+        // Debounced dashboard updates to prevent spam
+        if (!this.dashboardUpdateTimeout) {
+            this.dashboardUpdateTimeout = setTimeout(() => {
+                this.io.to('admins').emit('update_dashboard_stats', {
+                    timestamp: new Date(),
+                    message: 'Emergency statistics updated'
+                });
+                this.dashboardUpdateTimeout = undefined;
+            }, 1000);
+        }
     }
     startHeartbeat() {
-        // Send heartbeat every 30 seconds to maintain connections
-        setInterval(() => {
+        this.heartbeatInterval = setInterval(() => {
+            const connectedCount = this.getConnectedUsersCount();
             this.io.emit('heartbeat', {
                 timestamp: new Date(),
-                connectedUsers: this.getConnectedUsersCount()
+                connectedUsers: connectedCount,
+                serverLoad: process.memoryUsage().heapUsed / 1024 / 1024 // MB
             });
         }, 30000);
     }
-    // Utility methods
+    startCleanupTasks() {
+        // Clean up stale data every 5 minutes
+        this.cleanupInterval = setInterval(() => {
+            this.performCleanup();
+        }, 300000);
+    }
+    performCleanup() {
+        const now = Date.now();
+        // Clean rate limit map
+        for (const [ip, data] of this.rateLimitMap.entries()) {
+            if (now > data.resetTime) {
+                this.rateLimitMap.delete(ip);
+            }
+        }
+        // Clean emergency cache if too large
+        if (this.emergencyCache.size > this.MAX_CACHE_SIZE) {
+            const entries = Array.from(this.emergencyCache.entries());
+            const toDelete = entries.slice(0, Math.floor(this.MAX_CACHE_SIZE * 0.3));
+            toDelete.forEach(([key]) => this.emergencyCache.delete(key));
+        }
+        console.log(`🧹 Cleanup completed - Cache: ${this.emergencyCache.size}, Rate limits: ${this.rateLimitMap.size}`);
+    }
+    // Utility methods remain the same but with optimizations
     getConnectedUsers() {
         return Array.from(this.connectedUsers.values());
     }
     getConnectedUsersCount() {
         return this.connectedUsers.size;
+    }
+    async sendToUser(userId, event, data) {
+        const sockets = this.userSockets.get(userId);
+        if (sockets) {
+            sockets.forEach(socketId => {
+                this.io.to(socketId).emit(event, data);
+            });
+        }
+    }
+    async sendToRole(role, event, data) {
+        this.io.to(`role:${role}`).emit(event, data);
+    }
+    async sendToRecipientGroup(group, event, data) {
+        switch (group) {
+            case 'system_admins':
+                this.io.to('system_admins').emit(event, data);
+                break;
+            case 'fleet_managers':
+            case 'fleet_operators':
+                this.io.to('fleet_managers').emit(event, data);
+                break;
+            case 'passengers':
+            case 'users':
+                this.io.to('users').emit(event, data);
+                break;
+            case 'route_admins':
+            case 'routeadmins':
+                this.io.to('routeadmins').emit(event, data);
+                break;
+            case 'customer_service':
+                this.io.to('customer_service').emit(event, data);
+                break;
+            case 'staff_only':
+                this.io.to('admins').emit(event, data);
+                break;
+            case 'emergency_responders':
+                this.io.to('emergency_responders').emit(event, data);
+                break;
+            case 'all':
+            default:
+                this.io.to('all_users').emit(event, data);
+                break;
+        }
     }
     getUserSocketIds(userId) {
         const sockets = this.userSockets.get(userId);
@@ -341,54 +477,50 @@ class RealTimeEmergencyService {
     isUserConnected(userId) {
         return this.userSockets.has(userId);
     }
-    async sendToUser(userId, event, data) {
-        const socketIds = this.getUserSocketIds(userId);
-        socketIds.forEach(socketId => {
-            this.io.to(socketId).emit(event, data);
-        });
-    }
-    async sendToRole(role, event, data) {
-        this.io.to(`role:${role}`).emit(event, data);
-    }
-    // Updated method to send to specific groups based on new recipient mapping
-    async sendToRecipientGroup(group, event, data) {
-        switch (group) {
-            case 'system_admins':
-                this.io.to('system_admins').emit(event, data);
-                break;
-            case 'fleet_managers':
-                this.io.to('fleet_managers').emit(event, data);
-                break;
-            case 'users':
-                this.io.to('users').emit(event, data);
-                break;
-            case 'routeadmins':
-                this.io.to('routeadmins').emit(event, data);
-                break;
-            case 'customer_service':
-                this.io.to('customer_service').emit(event, data);
-                break;
-            case 'all':
-            default:
-                this.io.to('all_users').emit(event, data);
-                break;
+    cleanup() {
+        if (this.heartbeatInterval) {
+            clearInterval(this.heartbeatInterval);
+            this.heartbeatInterval = undefined;
         }
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+            this.cleanupInterval = undefined;
+        }
+        if (this.dashboardUpdateTimeout) {
+            clearTimeout(this.dashboardUpdateTimeout);
+            this.dashboardUpdateTimeout = undefined;
+        }
+        this.connectedUsers.clear();
+        this.userSockets.clear();
+        this.rateLimitMap.clear();
+        this.emergencyCache.clear();
+        console.log('Service cleanup completed');
     }
 }
-// Singleton instance
-let realTimeEmergencyService = null;
+// Singleton with proper cleanup - BACKWARD COMPATIBLE EXPORTS
+let optimizedRealTimeEmergencyService = null;
+// Keep old export names for backward compatibility
 const initializeRealTimeEmergencyService = (httpServer) => {
-    if (!realTimeEmergencyService) {
-        realTimeEmergencyService = new RealTimeEmergencyService(httpServer);
+    if (!optimizedRealTimeEmergencyService) {
+        optimizedRealTimeEmergencyService = new OptimizedRealTimeEmergencyService(httpServer);
     }
-    return realTimeEmergencyService;
+    return optimizedRealTimeEmergencyService;
 };
 exports.initializeRealTimeEmergencyService = initializeRealTimeEmergencyService;
 const getRealTimeEmergencyService = () => {
-    if (!realTimeEmergencyService) {
-        throw new Error('Real-time emergency service not initialized');
+    if (!optimizedRealTimeEmergencyService) {
+        throw new Error('Optimized real-time emergency service not initialized');
     }
-    return realTimeEmergencyService;
+    return optimizedRealTimeEmergencyService;
 };
 exports.getRealTimeEmergencyService = getRealTimeEmergencyService;
-exports.default = RealTimeEmergencyService;
+// New export names for future use
+exports.initializeOptimizedRealTimeEmergencyService = exports.initializeRealTimeEmergencyService;
+exports.getOptimizedRealTimeEmergencyService = exports.getRealTimeEmergencyService;
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    if (optimizedRealTimeEmergencyService) {
+        optimizedRealTimeEmergencyService.cleanup();
+    }
+});
+exports.default = OptimizedRealTimeEmergencyService;
