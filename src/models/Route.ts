@@ -58,7 +58,7 @@ export interface IRoute extends Document {
   adminNotes?: string;
 
   // NEW: Route Admin Assignment Fields
-  routeAdminId?: mongoose.Types.ObjectId;
+  routeAdminId?: mongoose.Types.ObjectId | null;
   routeAdminAssignment?: {
     assignedAt: Date;
     assignedBy: mongoose.Types.ObjectId;
@@ -378,7 +378,7 @@ RouteSchema.methods.assignRouteAdmin = async function(adminId: mongoose.Types.Ob
   }
 
   // Check if route admin is already assigned
-  if (this.routeAdminId && this.routeAdminAssignment?.status === 'assigned') {
+  if (this.routeAdminId && this.routeAdminId !== null && this.routeAdminAssignment?.status === 'assigned') {
     throw new Error('Route already has a route admin assigned');
   }
 
@@ -393,7 +393,7 @@ RouteSchema.methods.assignRouteAdmin = async function(adminId: mongoose.Types.Ob
 };
 
 RouteSchema.methods.unassignRouteAdmin = async function(unassignedBy: mongoose.Types.ObjectId, reason?: string) {
-  if (!this.routeAdminId || this.routeAdminAssignment?.status !== 'assigned') {
+  if (!this.routeAdminId || this.routeAdminId === null || this.routeAdminAssignment?.status !== 'assigned') {
     throw new Error('No route admin is currently assigned to this route');
   }
 
@@ -405,14 +405,14 @@ RouteSchema.methods.unassignRouteAdmin = async function(unassignedBy: mongoose.T
     if (reason) this.routeAdminAssignment.unassignReason = reason;
   }
 
-  // Clear route admin ID
-  this.routeAdminId = undefined;
+  // Clear route admin ID - set to null instead of undefined for better MongoDB querying
+  this.routeAdminId = null;
 
   return await this.save();
 };
 
 RouteSchema.methods.hasRouteAdmin = function() {
-  return !!(this.routeAdminId && this.routeAdminAssignment?.status === 'assigned');
+  return !!(this.routeAdminId && this.routeAdminId !== null && this.routeAdminAssignment?.status === 'assigned');
 };
 
 // Static methods for route admin queries

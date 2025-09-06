@@ -307,7 +307,7 @@ RouteSchema.methods.assignRouteAdmin = async function (adminId, assignedBy) {
         throw new Error('Only approved routes can have route admins assigned');
     }
     // Check if route admin is already assigned
-    if (this.routeAdminId && ((_a = this.routeAdminAssignment) === null || _a === void 0 ? void 0 : _a.status) === 'assigned') {
+    if (this.routeAdminId && this.routeAdminId !== null && ((_a = this.routeAdminAssignment) === null || _a === void 0 ? void 0 : _a.status) === 'assigned') {
         throw new Error('Route already has a route admin assigned');
     }
     this.routeAdminId = adminId;
@@ -320,7 +320,7 @@ RouteSchema.methods.assignRouteAdmin = async function (adminId, assignedBy) {
 };
 RouteSchema.methods.unassignRouteAdmin = async function (unassignedBy, reason) {
     var _a;
-    if (!this.routeAdminId || ((_a = this.routeAdminAssignment) === null || _a === void 0 ? void 0 : _a.status) !== 'assigned') {
+    if (!this.routeAdminId || this.routeAdminId === null || ((_a = this.routeAdminAssignment) === null || _a === void 0 ? void 0 : _a.status) !== 'assigned') {
         throw new Error('No route admin is currently assigned to this route');
     }
     // Update assignment record
@@ -331,13 +331,13 @@ RouteSchema.methods.unassignRouteAdmin = async function (unassignedBy, reason) {
         if (reason)
             this.routeAdminAssignment.unassignReason = reason;
     }
-    // Clear route admin ID
-    this.routeAdminId = undefined;
+    // Clear route admin ID - set to null instead of undefined for better MongoDB querying
+    this.routeAdminId = null;
     return await this.save();
 };
 RouteSchema.methods.hasRouteAdmin = function () {
     var _a;
-    return !!(this.routeAdminId && ((_a = this.routeAdminAssignment) === null || _a === void 0 ? void 0 : _a.status) === 'assigned');
+    return !!(this.routeAdminId && this.routeAdminId !== null && ((_a = this.routeAdminAssignment) === null || _a === void 0 ? void 0 : _a.status) === 'assigned');
 };
 // Static methods for route admin queries
 RouteSchema.statics.findByRouteAdmin = function (routeAdminId) {
