@@ -3,8 +3,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUserTimeline = exports.getUserActivity = exports.getUserStatistics = exports.getUserStats = exports.toggleUserStatus = exports.deleteUser = exports.updateUser = exports.createUser = exports.getUserById = exports.getAllUsers = void 0;
+exports.getUserTimeline = exports.getUserActivity = exports.getUserStatistics = exports.createRouteAdminWithAssignment = exports.getRouteAdmins = exports.removeRouteAdminAssignment = exports.assignRouteToAdmin = exports.createRouteAdmin = exports.getUserStats = exports.toggleUserStatus = exports.deleteUser = exports.updateUser = exports.createUser = exports.getUserById = exports.getAllUsers = void 0;
 const User_1 = __importDefault(require("../models/User"));
+const Route_1 = __importDefault(require("../models/Route"));
 const UserActivity_1 = __importDefault(require("../models/UserActivity"));
 const mongoose_1 = __importDefault(require("mongoose"));
 // @desc    Get all users with pagination and filtering
@@ -97,7 +98,20 @@ const getUserById = async (req, res) => {
             res.status(404).json({ message: 'User not found' });
             return;
         }
-        res.json(user);
+        // If user is route admin, get assigned route info
+        let assignedRoute = null;
+        if (user.role === 'route_admin') {
+            assignedRoute = await Route_1.default.findOne({
+                routeAdminId: user._id,
+                'routeAdminAssignment.status': 'assigned',
+                approvalStatus: 'approved',
+                isActive: true
+            }).select('_id name routeId startLocation endLocation routeAdminAssignment');
+        }
+        res.json({
+            ...user.toObject(),
+            assignedRoute
+        });
     }
     catch (error) {
         console.error('Get user by ID error:', error);
@@ -226,6 +240,7 @@ exports.updateUser = updateUser;
 // @route   DELETE /api/admin/users/:id
 // @access  Private (System Admin)
 const deleteUser = async (req, res) => {
+    var _a;
     try {
         const { id } = req.params;
         // Prevent deletion of system admin users
@@ -237,6 +252,18 @@ const deleteUser = async (req, res) => {
         if (user.role === 'system_admin') {
             res.status(400).json({ message: 'Cannot delete system administrator accounts' });
             return;
+        }
+        // If deleting a route admin, unassign from any routes first
+        if (user.role === 'route_admin') {
+            await Route_1.default.updateMany({ routeAdminId: user._id }, {
+                $unset: { routeAdminId: 1 },
+                $set: {
+                    'routeAdminAssignment.status': 'unassigned',
+                    'routeAdminAssignment.unassignedAt': new Date(),
+                    'routeAdminAssignment.unassignedBy': (_a = req.user) === null || _a === void 0 ? void 0 : _a._id,
+                    'routeAdminAssignment.unassignReason': 'Route admin account deleted'
+                }
+            });
         }
         // Delete user
         await User_1.default.findByIdAndDelete(id);
@@ -308,6 +335,8 @@ const getUserStats = async (req, res) => {
         const recentRegistrations = await User_1.default.countDocuments({
             createdAt: { $gte: thirtyDaysAgo }
         });
+        // NEW: Get route admin statistics
+        const routeAdminStats = await getRouteAdminStatistics();
         const stats = {
             totalUsers,
             activeUsers,
@@ -316,7 +345,8 @@ const getUserStats = async (req, res) => {
             byRole: usersByRole.reduce((acc, item) => {
                 acc[item._id] = item.count;
                 return acc;
-            }, {})
+            }, {}),
+            routeAdmins: routeAdminStats // NEW
         };
         res.json(stats);
     }
@@ -329,6 +359,359 @@ const getUserStats = async (req, res) => {
     }
 };
 exports.getUserStats = getUserStats;
+// NEW: Helper function to get route admin statistics
+const getRouteAdminStatistics = async () => {
+    try {
+        const totalRouteAdmins = await User_1.default.countDocuments({ role: 'route_admin', isActive: true });
+        const assignedRouteAdmins = await Route_1.default.countDocuments({
+            routeAdminId: { $ne: null },
+            'routeAdminAssignment.status': 'assigned',
+            approvalStatus: 'approved',
+            isActive: true
+        });
+        return {
+            total: totalRouteAdmins,
+            assigned: assignedRouteAdmins,
+            unassigned: totalRouteAdmins - assignedRouteAdmins
+        };
+    }
+    catch (error) {
+        return { total: 0, assigned: 0, unassigned: 0 };
+    }
+};
+// ===================================================
+// NEW: ROUTE ADMIN SPECIFIC FUNCTIONS
+// ===================================================
+// @desc    Create route admin account
+// @route   POST /api/admin/users/route-admin
+// @access  Private (System Admin)
+const createRouteAdmin = async (req, res) => {
+    try {
+        const { name, email, password, phone, department = 'Route Management' } = req.body;
+        // Validate required fields
+        if (!name || !email || !password) {
+            res.status(400).json({ message: 'Name, email, and password are required' });
+            return;
+        }
+        // Check if user already exists
+        const existingUser = await User_1.default.findOne({ email });
+        if (existingUser) {
+            res.status(400).json({ message: 'User with this email already exists' });
+            return;
+        }
+        // Create route admin user
+        const routeAdminData = {
+            name,
+            email,
+            password,
+            role: 'route_admin',
+            phone,
+            department,
+            company: 'Sri Express',
+            permissions: [
+                'route_vehicle_assignment',
+                'route_schedule_management',
+                'route_analytics_view',
+                'fleet_communication'
+            ],
+            isActive: true
+        };
+        const routeAdmin = await User_1.default.create(routeAdminData);
+        // Return without password
+        const routeAdminResponse = await User_1.default.findById(routeAdmin._id).select('-password');
+        res.status(201).json({
+            message: 'Route admin created successfully',
+            routeAdmin: routeAdminResponse
+        });
+    }
+    catch (error) {
+        console.error('Create route admin error:', error);
+        res.status(500).json({
+            message: 'Server error',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+};
+exports.createRouteAdmin = createRouteAdmin;
+// @desc    Assign route to route admin
+// @route   POST /api/admin/users/:routeAdminId/assign-route
+// @access  Private (System Admin)
+const assignRouteToAdmin = async (req, res) => {
+    var _a, _b, _c;
+    try {
+        const { routeAdminId } = req.params;
+        const { routeId } = req.body;
+        const systemAdminId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
+        if (!systemAdminId) {
+            res.status(401).json({ message: 'System admin ID not found' });
+            return;
+        }
+        // Validate IDs
+        if (!mongoose_1.default.Types.ObjectId.isValid(routeAdminId) || !mongoose_1.default.Types.ObjectId.isValid(routeId)) {
+            res.status(400).json({ message: 'Invalid route admin ID or route ID' });
+            return;
+        }
+        // Find route admin
+        const routeAdmin = await User_1.default.findById(routeAdminId);
+        if (!routeAdmin || routeAdmin.role !== 'route_admin') {
+            res.status(404).json({ message: 'Route admin not found' });
+            return;
+        }
+        // Find route
+        const route = await Route_1.default.findById(routeId);
+        if (!route) {
+            res.status(404).json({ message: 'Route not found' });
+            return;
+        }
+        // Check if route admin is already assigned to a route
+        const existingAssignment = await Route_1.default.findOne({
+            routeAdminId: routeAdminId,
+            'routeAdminAssignment.status': 'assigned',
+            approvalStatus: 'approved',
+            isActive: true
+        });
+        if (existingAssignment) {
+            res.status(400).json({
+                message: 'Route admin is already assigned to another route',
+                assignedRoute: {
+                    _id: existingAssignment._id,
+                    name: existingAssignment.name,
+                    routeId: existingAssignment.routeId
+                }
+            });
+            return;
+        }
+        // Assign route admin to route
+        await route.assignRouteAdmin(new mongoose_1.default.Types.ObjectId(routeAdminId), systemAdminId);
+        // Get updated route with populated route admin
+        const updatedRoute = await Route_1.default.findById(routeId)
+            .populate('routeAdminId', 'name email phone')
+            .populate('routeAdminAssignment.assignedBy', 'name email');
+        res.json({
+            message: 'Route admin assigned successfully',
+            assignment: {
+                routeAdmin: {
+                    _id: routeAdmin._id,
+                    name: routeAdmin.name,
+                    email: routeAdmin.email
+                },
+                route: {
+                    _id: route._id,
+                    name: route.name,
+                    routeId: route.routeId
+                },
+                assignedAt: (_b = updatedRoute === null || updatedRoute === void 0 ? void 0 : updatedRoute.routeAdminAssignment) === null || _b === void 0 ? void 0 : _b.assignedAt,
+                assignedBy: (_c = updatedRoute === null || updatedRoute === void 0 ? void 0 : updatedRoute.routeAdminAssignment) === null || _c === void 0 ? void 0 : _c.assignedBy
+            }
+        });
+    }
+    catch (error) {
+        console.error('Assign route to admin error:', error);
+        res.status(500).json({
+            message: 'Server error',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+};
+exports.assignRouteToAdmin = assignRouteToAdmin;
+// @desc    Remove route admin assignment
+// @route   DELETE /api/admin/users/:routeAdminId/remove-route
+// @access  Private (System Admin)
+const removeRouteAdminAssignment = async (req, res) => {
+    var _a;
+    try {
+        const { routeAdminId } = req.params;
+        const { reason } = req.body;
+        const systemAdminId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
+        if (!systemAdminId) {
+            res.status(401).json({ message: 'System admin ID not found' });
+            return;
+        }
+        if (!mongoose_1.default.Types.ObjectId.isValid(routeAdminId)) {
+            res.status(400).json({ message: 'Invalid route admin ID' });
+            return;
+        }
+        // Find route admin
+        const routeAdmin = await User_1.default.findById(routeAdminId);
+        if (!routeAdmin || routeAdmin.role !== 'route_admin') {
+            res.status(404).json({ message: 'Route admin not found' });
+            return;
+        }
+        // Find assigned route
+        const assignedRoute = await Route_1.default.findOne({
+            routeAdminId: routeAdminId,
+            'routeAdminAssignment.status': 'assigned',
+            isActive: true
+        });
+        if (!assignedRoute) {
+            res.status(404).json({ message: 'No active route assignment found for this route admin' });
+            return;
+        }
+        // Remove assignment
+        await assignedRoute.unassignRouteAdmin(systemAdminId, reason || 'Assignment removed by system admin');
+        res.json({
+            message: 'Route admin assignment removed successfully',
+            routeAdmin: {
+                _id: routeAdmin._id,
+                name: routeAdmin.name,
+                email: routeAdmin.email
+            },
+            previousRoute: {
+                _id: assignedRoute._id,
+                name: assignedRoute.name,
+                routeId: assignedRoute.routeId
+            }
+        });
+    }
+    catch (error) {
+        console.error('Remove route admin assignment error:', error);
+        res.status(500).json({
+            message: 'Server error',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+};
+exports.removeRouteAdminAssignment = removeRouteAdminAssignment;
+// @desc    Get all route admins with their assignments
+// @route   GET /api/admin/users/route-admins
+// @access  Private (System Admin)
+const getRouteAdmins = async (req, res) => {
+    try {
+        const { includeUnassigned = true } = req.query;
+        // Get all route admins
+        const routeAdmins = await User_1.default.find({
+            role: 'route_admin',
+            isActive: true
+        }).select('-password');
+        // Get route assignments for each route admin
+        const routeAdminsWithAssignments = await Promise.all(routeAdmins.map(async (admin) => {
+            const assignedRoute = await Route_1.default.findOne({
+                routeAdminId: admin._id,
+                'routeAdminAssignment.status': 'assigned',
+                approvalStatus: 'approved',
+                isActive: true
+            })
+                .select('_id name routeId startLocation endLocation routeAdminAssignment')
+                .populate('routeAdminAssignment.assignedBy', 'name email');
+            return {
+                ...admin.toObject(),
+                assignedRoute,
+                hasAssignment: !!assignedRoute
+            };
+        }));
+        // Filter based on includeUnassigned parameter
+        const filteredAdmins = includeUnassigned
+            ? routeAdminsWithAssignments
+            : routeAdminsWithAssignments.filter(admin => admin.hasAssignment);
+        // Get statistics
+        const stats = {
+            total: routeAdmins.length,
+            assigned: routeAdminsWithAssignments.filter(admin => admin.hasAssignment).length,
+            unassigned: routeAdminsWithAssignments.filter(admin => !admin.hasAssignment).length
+        };
+        res.json({
+            routeAdmins: filteredAdmins,
+            stats
+        });
+    }
+    catch (error) {
+        console.error('Get route admins error:', error);
+        res.status(500).json({
+            message: 'Server error',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+};
+exports.getRouteAdmins = getRouteAdmins;
+// @desc    Create route admin and assign to route in one step
+// @route   POST /api/admin/users/route-admin-with-assignment
+// @access  Private (System Admin)
+const createRouteAdminWithAssignment = async (req, res) => {
+    var _a, _b, _c;
+    try {
+        const { name, email, password, phone, routeId } = req.body;
+        const systemAdminId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
+        if (!systemAdminId) {
+            res.status(401).json({ message: 'System admin ID not found' });
+            return;
+        }
+        // Validate required fields
+        if (!name || !email || !password || !routeId) {
+            res.status(400).json({ message: 'Name, email, password, and route ID are required' });
+            return;
+        }
+        // Check if user already exists
+        const existingUser = await User_1.default.findOne({ email });
+        if (existingUser) {
+            res.status(400).json({ message: 'User with this email already exists' });
+            return;
+        }
+        // Check if route exists and is available
+        const route = await Route_1.default.findById(routeId);
+        if (!route) {
+            res.status(404).json({ message: 'Route not found' });
+            return;
+        }
+        if (route.hasRouteAdmin()) {
+            res.status(400).json({ message: 'Route already has a route admin assigned' });
+            return;
+        }
+        // Create route admin
+        const routeAdminData = {
+            name,
+            email,
+            password,
+            role: 'route_admin',
+            phone,
+            department: 'Route Management',
+            company: 'Sri Express',
+            permissions: [
+                'route_vehicle_assignment',
+                'route_schedule_management',
+                'route_analytics_view',
+                'fleet_communication'
+            ],
+            isActive: true
+        };
+        const routeAdmin = await User_1.default.create(routeAdminData);
+        // Assign route to route admin
+        await route.assignRouteAdmin(routeAdmin._id, systemAdminId);
+        // Get complete assignment info
+        const updatedRoute = await Route_1.default.findById(routeId)
+            .populate('routeAdminId', 'name email phone')
+            .populate('routeAdminAssignment.assignedBy', 'name email');
+        res.status(201).json({
+            message: 'Route admin created and assigned successfully',
+            routeAdmin: {
+                _id: routeAdmin._id,
+                name: routeAdmin.name,
+                email: routeAdmin.email,
+                role: routeAdmin.role,
+                phone: routeAdmin.phone
+            },
+            assignment: {
+                route: {
+                    _id: route._id,
+                    name: route.name,
+                    routeId: route.routeId
+                },
+                assignedAt: (_b = updatedRoute === null || updatedRoute === void 0 ? void 0 : updatedRoute.routeAdminAssignment) === null || _b === void 0 ? void 0 : _b.assignedAt,
+                assignedBy: (_c = updatedRoute === null || updatedRoute === void 0 ? void 0 : updatedRoute.routeAdminAssignment) === null || _c === void 0 ? void 0 : _c.assignedBy
+            }
+        });
+    }
+    catch (error) {
+        console.error('Create route admin with assignment error:', error);
+        res.status(500).json({
+            message: 'Server error',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+};
+exports.createRouteAdminWithAssignment = createRouteAdminWithAssignment;
+// ===================================================
+// EXISTING FUNCTIONS (unchanged)
+// ===================================================
 // @desc    Get individual user statistics
 // @route   GET /api/admin/users/:id/stats
 // @access  Private (System Admin)
@@ -378,6 +761,22 @@ const getUserStatistics = async (req, res) => {
                 };
                 break;
             case 'route_admin':
+                // NEW: Route admin specific stats
+                const assignedRoute = await Route_1.default.findOne({
+                    routeAdminId: id,
+                    'routeAdminAssignment.status': 'assigned',
+                    approvalStatus: 'approved',
+                    isActive: true
+                });
+                roleSpecificStats = {
+                    hasAssignedRoute: !!assignedRoute,
+                    assignedRouteName: (assignedRoute === null || assignedRoute === void 0 ? void 0 : assignedRoute.name) || null,
+                    assignedRouteId: (assignedRoute === null || assignedRoute === void 0 ? void 0 : assignedRoute.routeId) || null,
+                    vehiclesManaged: Math.floor(Math.random() * 15) + 3,
+                    activeAssignments: Math.floor(Math.random() * 12) + 2,
+                    routePerformanceRating: Math.round((Math.random() * 2 + 3) * 10) / 10 // 3.0-5.0
+                };
+                break;
             case 'company_admin':
                 roleSpecificStats = {
                     devicesManaged: Math.floor(Math.random() * 20) + 5,

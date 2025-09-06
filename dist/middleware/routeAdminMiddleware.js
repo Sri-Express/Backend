@@ -3,12 +3,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.logRouteAdminActivity = exports.requireMultiRouteAccess = exports.routeSpecificAuth = exports.standardRouteAdminAuth = exports.requireRole = exports.attachRouteAdminStats = exports.requireActiveRoute = exports.validateRouteAdminPermissions = exports.requireAssignedRoute = exports.requireRouteAdminForRoute = exports.requireRouteAdmin = exports.isRouteAdmin = exports.isAdmin = exports.protect = void 0;
+exports.routeSpecificAuth = exports.standardRouteAdminAuth = exports.attachRouteAdminStats = exports.requireActiveRoute = exports.logRouteAdminActivity = exports.validateRouteAdminPermissions = exports.requireAssignedRoute = exports.requireRouteAdminForRoute = exports.requireRouteAdmin = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const User_1 = __importDefault(require("../models/User"));
 const Route_1 = __importDefault(require("../models/Route"));
 const mongoose_1 = __importDefault(require("mongoose"));
-const protect = async (req, res, next) => {
+// Middleware to check if user is route admin
+const requireRouteAdmin = async (req, res, next) => {
     try {
         let token;
         // Check for token in Authorization header
@@ -29,6 +30,15 @@ const protect = async (req, res, next) => {
                 res.status(401).json({ message: 'Not authorized, user not found' });
                 return;
             }
+            // Check if user is route admin (or system admin for testing)
+            if (user.role !== 'route_admin' && user.role !== 'system_admin') {
+                res.status(403).json({
+                    message: 'Access denied. Route administrator privileges required.',
+                    userRole: user.role,
+                    requiredRole: 'route_admin'
+                });
+                return;
+            }
             // Set user in request object
             req.user = user;
             next();
@@ -38,54 +48,6 @@ const protect = async (req, res, next) => {
             res.status(401).json({ message: 'Not authorized, token invalid' });
             return;
         }
-    }
-    catch (error) {
-        console.error('Auth middleware error:', error);
-        res.status(500).json({ message: 'Server error' });
-        return;
-    }
-};
-exports.protect = protect;
-// Middleware to check if user is admin
-const isAdmin = (req, res, next) => {
-    if (req.user && (req.user.role === 'system_admin' || req.user.role === 'company_admin')) {
-        next();
-    }
-    else {
-        res.status(403).json({ message: 'Not authorized as an admin' });
-    }
-};
-exports.isAdmin = isAdmin;
-// Middleware to check if user is route admin
-const isRouteAdmin = (req, res, next) => {
-    if (req.user && (req.user.role === 'route_admin' || req.user.role === 'system_admin')) {
-        next();
-    }
-    else {
-        res.status(403).json({ message: 'Not authorized as a route admin' });
-    }
-};
-exports.isRouteAdmin = isRouteAdmin;
-// ===================================================
-// NEW: ROUTE ADMIN SPECIFIC MIDDLEWARE
-// ===================================================
-// Middleware to check if user is route admin (strict check)
-const requireRouteAdmin = async (req, res, next) => {
-    try {
-        if (!req.user) {
-            res.status(401).json({ message: 'Not authenticated' });
-            return;
-        }
-        // Check if user is route admin (or system admin for testing)
-        if (req.user.role !== 'route_admin' && req.user.role !== 'system_admin') {
-            res.status(403).json({
-                message: 'Access denied. Route administrator privileges required.',
-                userRole: req.user.role,
-                requiredRole: 'route_admin'
-            });
-            return;
-        }
-        next();
     }
     catch (error) {
         console.error('Route admin middleware error:', error);
@@ -122,7 +84,6 @@ const requireRouteAdminForRoute = (routeIdParam = 'routeId') => {
             const route = await Route_1.default.findOne({
                 _id: routeId,
                 routeAdminId: userId,
-                'routeAdminAssignment.status': 'assigned',
                 approvalStatus: 'approved',
                 isActive: true
             });
@@ -162,7 +123,6 @@ const requireAssignedRoute = async (req, res, next) => {
         // Check if route admin has any route assigned
         const assignedRoute = await Route_1.default.findOne({
             routeAdminId: userId,
-            'routeAdminAssignment.status': 'assigned',
             approvalStatus: 'approved',
             isActive: true
         });
@@ -225,6 +185,34 @@ const validateRouteAdminPermissions = (allowedActions = []) => {
     };
 };
 exports.validateRouteAdminPermissions = validateRouteAdminPermissions;
+// Middleware to log route admin activities
+const logRouteAdminActivity = (action, category = 'route_management') => {
+    return async (req, res, next) => {
+        var _a, _b;
+        try {
+            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
+            const routeId = (_b = req.assignedRoute) === null || _b === void 0 ? void 0 : _b._id;
+            // Store activity info in request for later logging
+            req.activityLog = {
+                userId,
+                routeId,
+                action,
+                category,
+                ipAddress: req.ip,
+                userAgent: req.get('User-Agent'),
+                timestamp: new Date(),
+                endpoint: `${req.method} ${req.originalUrl}`
+            };
+            next();
+        }
+        catch (error) {
+            console.error('Activity logging error:', error);
+            // Don't fail the request due to logging error
+            next();
+        }
+    };
+};
+exports.logRouteAdminActivity = logRouteAdminActivity;
 // Middleware to check route operational status
 const requireActiveRoute = async (req, res, next) => {
     var _a;
@@ -262,14 +250,13 @@ const requireActiveRoute = async (req, res, next) => {
 exports.requireActiveRoute = requireActiveRoute;
 // Helper middleware to get route admin statistics
 const attachRouteAdminStats = async (req, res, next) => {
-    var _a, _b, _c;
+    var _a, _b;
     try {
         const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
         if (((_b = req.user) === null || _b === void 0 ? void 0 : _b.role) === 'route_admin' && userId) {
             // Get route admin statistics
             const assignedRoute = await Route_1.default.findOne({
                 routeAdminId: userId,
-                'routeAdminAssignment.status': 'assigned',
                 approvalStatus: 'approved',
                 isActive: true
             });
@@ -277,9 +264,9 @@ const attachRouteAdminStats = async (req, res, next) => {
                 // Attach basic stats to request
                 req.routeAdminStats = {
                     hasAssignedRoute: true,
-                    routeId: assignedRoute._id,
+                    routeId: assignedRoute._id, // ← Add type casting
                     routeName: assignedRoute.name,
-                    assignedSince: ((_c = assignedRoute.routeAdminAssignment) === null || _c === void 0 ? void 0 : _c.assignedAt) || assignedRoute.updatedAt
+                    assignedSince: assignedRoute.updatedAt
                 };
             }
             else {
@@ -300,112 +287,27 @@ const attachRouteAdminStats = async (req, res, next) => {
     }
 };
 exports.attachRouteAdminStats = attachRouteAdminStats;
-// Composite middleware for role-based access control
-const requireRole = (allowedRoles) => {
-    return async (req, res, next) => {
-        try {
-            if (!req.user) {
-                res.status(401).json({ message: 'Not authorized' });
-                return;
-            }
-            if (!allowedRoles.includes(req.user.role)) {
-                res.status(403).json({
-                    message: `Access denied. Required roles: ${allowedRoles.join(', ')}`,
-                    userRole: req.user.role,
-                    allowedRoles
-                });
-                return;
-            }
-            next();
-        }
-        catch (error) {
-            console.error('Role check error:', error);
-            res.status(500).json({ message: 'Server error' });
-            return;
-        }
-    };
-};
-exports.requireRole = requireRole;
 // Composite middleware for common route admin checks
 exports.standardRouteAdminAuth = [
-    exports.protect,
     exports.requireRouteAdmin,
     exports.requireAssignedRoute,
     exports.attachRouteAdminStats
 ];
 // Composite middleware for route-specific operations
 const routeSpecificAuth = (routeIdParam = 'routeId') => [
-    exports.protect,
     exports.requireRouteAdmin,
     (0, exports.requireRouteAdminForRoute)(routeIdParam),
     exports.requireActiveRoute
 ];
 exports.routeSpecificAuth = routeSpecificAuth;
-// Middleware to check if user can manage multiple routes (only system admins)
-const requireMultiRouteAccess = async (req, res, next) => {
-    try {
-        if (!req.user) {
-            res.status(401).json({ message: 'Not authenticated' });
-            return;
-        }
-        // Only system admins can manage multiple routes
-        if (req.user.role !== 'system_admin') {
-            res.status(403).json({
-                message: 'Access denied. Only system administrators can manage multiple routes.'
-            });
-            return;
-        }
-        next();
-    }
-    catch (error) {
-        console.error('Multi-route access check error:', error);
-        res.status(500).json({ message: 'Server error' });
-        return;
-    }
-};
-exports.requireMultiRouteAccess = requireMultiRouteAccess;
-// Middleware to log route admin activities
-const logRouteAdminActivity = (action, category = 'route_management') => {
-    return async (req, res, next) => {
-        var _a, _b;
-        try {
-            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
-            const routeId = (_b = req.assignedRoute) === null || _b === void 0 ? void 0 : _b._id;
-            // Store activity info in request for later logging
-            req.activityLog = {
-                userId,
-                routeId,
-                action,
-                category,
-                ipAddress: req.ip,
-                userAgent: req.get('User-Agent'),
-                timestamp: new Date(),
-                endpoint: `${req.method} ${req.originalUrl}`
-            };
-            next();
-        }
-        catch (error) {
-            console.error('Activity logging error:', error);
-            // Don't fail the request due to logging error
-            next();
-        }
-    };
-};
-exports.logRouteAdminActivity = logRouteAdminActivity;
-// Export all middleware functions
 exports.default = {
-    protect: exports.protect,
-    isAdmin: exports.isAdmin,
-    isRouteAdmin: exports.isRouteAdmin,
     requireRouteAdmin: exports.requireRouteAdmin,
     requireRouteAdminForRoute: exports.requireRouteAdminForRoute,
     requireAssignedRoute: exports.requireAssignedRoute,
     validateRouteAdminPermissions: exports.validateRouteAdminPermissions,
+    logRouteAdminActivity: exports.logRouteAdminActivity,
     requireActiveRoute: exports.requireActiveRoute,
     attachRouteAdminStats: exports.attachRouteAdminStats,
-    requireRole: exports.requireRole,
     standardRouteAdminAuth: exports.standardRouteAdminAuth,
-    routeSpecificAuth: exports.routeSpecificAuth,
-    requireMultiRouteAccess: exports.requireMultiRouteAccess,
-    logRouteAdminActivity: exports.logRouteAdminActivity
+    routeSpecificAuth: exports.routeSpecificAuth
 };

@@ -43,6 +43,7 @@ const paymentSimulationRoutes_1 = __importDefault(require("./routes/paymentSimul
 const fleetRoutes_1 = __importDefault(require("./routes/fleetRoutes")); // ← ADD THIS LINE
 const csRoutes_1 = __importDefault(require("./routes/csRoutes")); // ⭐ NEW - Customer Service Routes
 const weatherRoutes_1 = __importDefault(require("./routes/weatherRoutes")); // ⭐ ADD THIS LINE
+const routeAdminRoutes_1 = __importDefault(require("./routes/routeAdminRoutes"));
 // Import middleware
 const errorMiddleware_1 = require("./middleware/errorMiddleware");
 // Import DB connection
@@ -346,6 +347,7 @@ app.use('/api/weather', weatherRoutes_1.default);
 // Error handling middleware
 app.use(errorMiddleware_1.notFound);
 app.use(errorMiddleware_1.errorHandler);
+app.use('/api/route-admin', routeAdminRoutes_1.default);
 // Global error handler for uncaught exceptions
 process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:', error);

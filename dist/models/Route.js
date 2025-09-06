@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-// src/models/Route.ts - Updated with Approval Workflow
+// src/models/Route.ts - Updated with Route Admin Assignment Support
 const mongoose_1 = __importStar(require("mongoose"));
 const RouteSchema = new mongoose_1.Schema({
     routeId: {
@@ -185,6 +185,36 @@ const RouteSchema = new mongoose_1.Schema({
     adminNotes: {
         type: String
     },
+    // NEW: Route Admin Assignment Fields
+    routeAdminId: {
+        type: mongoose_1.default.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+    },
+    routeAdminAssignment: {
+        assignedAt: {
+            type: Date
+        },
+        assignedBy: {
+            type: mongoose_1.default.Schema.Types.ObjectId,
+            ref: 'User'
+        },
+        status: {
+            type: String,
+            enum: ['assigned', 'unassigned'],
+            default: 'unassigned'
+        },
+        unassignedAt: {
+            type: Date
+        },
+        unassignedBy: {
+            type: mongoose_1.default.Schema.Types.ObjectId,
+            ref: 'User'
+        },
+        unassignReason: {
+            type: String
+        }
+    },
     // Operational Status
     status: {
         type: String,
@@ -218,6 +248,10 @@ RouteSchema.index({ isActive: 1 });
 RouteSchema.index({ submittedAt: -1 });
 RouteSchema.index({ 'startLocation.name': 1 });
 RouteSchema.index({ 'endLocation.name': 1 });
+// NEW: Route Admin indexes
+RouteSchema.index({ routeAdminId: 1 });
+RouteSchema.index({ routeAdminId: 1, approvalStatus: 1 });
+RouteSchema.index({ 'routeAdminAssignment.status': 1 });
 // Calculate price method
 RouteSchema.methods.calculatePrice = function (passengerType = 'regular') {
     let totalPrice = this.pricing.basePrice + (this.distance * this.pricing.pricePerKm);
@@ -264,6 +298,106 @@ RouteSchema.methods.resubmit = async function () {
     this.rejectionReason = undefined;
     this.status = 'active'; // Reset to active when resubmitting
     return await this.save();
+};
+// NEW: Route Admin Assignment Methods
+RouteSchema.methods.assignRouteAdmin = async function (adminId, assignedBy) {
+    var _a;
+    // Check if route is approved
+    if (this.approvalStatus !== 'approved') {
+        throw new Error('Only approved routes can have route admins assigned');
+    }
+    // Check if route admin is already assigned
+    if (this.routeAdminId && ((_a = this.routeAdminAssignment) === null || _a === void 0 ? void 0 : _a.status) === 'assigned') {
+        throw new Error('Route already has a route admin assigned');
+    }
+    this.routeAdminId = adminId;
+    this.routeAdminAssignment = {
+        assignedAt: new Date(),
+        assignedBy: assignedBy,
+        status: 'assigned'
+    };
+    return await this.save();
+};
+RouteSchema.methods.unassignRouteAdmin = async function (unassignedBy, reason) {
+    var _a;
+    if (!this.routeAdminId || ((_a = this.routeAdminAssignment) === null || _a === void 0 ? void 0 : _a.status) !== 'assigned') {
+        throw new Error('No route admin is currently assigned to this route');
+    }
+    // Update assignment record
+    if (this.routeAdminAssignment) {
+        this.routeAdminAssignment.status = 'unassigned';
+        this.routeAdminAssignment.unassignedAt = new Date();
+        this.routeAdminAssignment.unassignedBy = unassignedBy;
+        if (reason)
+            this.routeAdminAssignment.unassignReason = reason;
+    }
+    // Clear route admin ID
+    this.routeAdminId = undefined;
+    return await this.save();
+};
+RouteSchema.methods.hasRouteAdmin = function () {
+    var _a;
+    return !!(this.routeAdminId && ((_a = this.routeAdminAssignment) === null || _a === void 0 ? void 0 : _a.status) === 'assigned');
+};
+// Static methods for route admin queries
+RouteSchema.statics.findByRouteAdmin = function (routeAdminId) {
+    return this.findOne({
+        routeAdminId: routeAdminId,
+        'routeAdminAssignment.status': 'assigned',
+        approvalStatus: 'approved',
+        isActive: true
+    });
+};
+RouteSchema.statics.findUnassignedRoutes = function () {
+    return this.find({
+        $or: [
+            { routeAdminId: { $exists: false } },
+            { routeAdminId: null },
+            { 'routeAdminAssignment.status': 'unassigned' }
+        ],
+        approvalStatus: 'approved',
+        isActive: true
+    });
+};
+RouteSchema.statics.getRouteAdminStats = async function () {
+    const stats = await this.aggregate([
+        { $match: { approvalStatus: 'approved', isActive: true } },
+        {
+            $group: {
+                _id: null,
+                totalRoutes: { $sum: 1 },
+                assignedRoutes: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $ne: ['$routeAdminId', null] },
+                                    { $eq: ['$routeAdminAssignment.status', 'assigned'] }
+                                ]
+                            },
+                            1,
+                            0
+                        ]
+                    }
+                },
+                unassignedRoutes: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $or: [
+                                    { $eq: ['$routeAdminId', null] },
+                                    { $eq: ['$routeAdminAssignment.status', 'unassigned'] }
+                                ]
+                            },
+                            1,
+                            0
+                        ]
+                    }
+                }
+            }
+        }
+    ]);
+    return stats[0] || { totalRoutes: 0, assignedRoutes: 0, unassignedRoutes: 0 };
 };
 const Route = mongoose_1.default.model('Route', RouteSchema);
 exports.default = Route;

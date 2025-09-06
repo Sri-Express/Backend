@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-// src/routes/adminRoutes.ts - COMPLETE ADMIN ROUTES WITH GPS SIMULATION & ROUTE MANAGEMENT
+// src/routes/adminRoutes.ts - COMPLETE ADMIN ROUTES WITH ROUTE ADMIN MANAGEMENT
 const express_1 = __importDefault(require("express"));
 const adminMiddleware_1 = require("../middleware/adminMiddleware");
 const authMiddleware_1 = require("../middleware/authMiddleware");
@@ -73,6 +73,37 @@ router.patch('/users/:id/toggle-status', adminUserController_1.toggleUserStatus)
 router.get('/users/:id', adminUserController_1.getUserById);
 router.put('/users/:id', adminUserController_1.updateUser);
 router.delete('/users/:id', adminUserController_1.deleteUser);
+// ============================
+// NEW: ROUTE ADMIN MANAGEMENT ROUTES
+// ============================
+// Route admin user management
+router.get('/users/route-admins', adminUserController_1.getRouteAdmins);
+router.post('/users/route-admin', adminUserController_1.createRouteAdmin);
+router.post('/users/route-admin-with-assignment', adminUserController_1.createRouteAdminWithAssignment);
+// Route admin assignment management
+router.post('/users/:routeAdminId/assign-route', adminUserController_1.assignRouteToAdmin);
+router.delete('/users/:routeAdminId/remove-route', adminUserController_1.removeRouteAdminAssignment);
+// Test route for route admin endpoints
+router.get('/users/route-admins/test', async (req, res) => {
+    try {
+        res.json({
+            message: 'Route admin user management endpoints are working!',
+            timestamp: new Date().toISOString(),
+            availableEndpoints: [
+                'GET /api/admin/users/route-admins - Get all route admins with assignments',
+                'POST /api/admin/users/route-admin - Create route admin account',
+                'POST /api/admin/users/route-admin-with-assignment - Create and assign in one step',
+                'POST /api/admin/users/:routeAdminId/assign-route - Assign route to admin',
+                'DELETE /api/admin/users/:routeAdminId/remove-route - Remove assignment',
+                'GET /api/admin/users/route-admins/test - This test endpoint'
+            ],
+            totalEndpoints: 6
+        });
+    }
+    catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+});
 // ============================
 // DEVICE MANAGEMENT ROUTES
 // ============================
@@ -203,12 +234,18 @@ router.get('/routes', adminRouteController_1.getAllRoutes);
 router.get('/routes/stats', adminRouteController_1.getRouteStats);
 router.get('/routes/pending', adminRouteController_1.getPendingRoutes);
 router.get('/routes/fleet/:fleetId', adminRouteController_1.getRoutesByFleet);
-router.post('/routes', adminRouteController_1.createRoute); // NEW: Admin route creation
+router.post('/routes', adminRouteController_1.createRoute); // Admin route creation
 router.get('/routes/:id', adminRouteController_1.getRouteById);
 router.put('/routes/:id/approve', adminRouteController_1.approveRoute);
 router.put('/routes/:id/reject', adminRouteController_1.rejectRoute);
 router.put('/routes/:id', adminRouteController_1.updateRoute);
 router.delete('/routes/:id', adminRouteController_1.deleteRoute);
+// NEW: Route admin assignment routes
+router.get('/routes/admin-assignments', adminRouteController_1.getRouteAdminAssignments);
+router.get('/routes/unassigned', adminRouteController_1.getUnassignedRoutes);
+router.put('/routes/:routeId/assign-admin', adminRouteController_1.assignRouteAdmin);
+router.delete('/routes/:routeId/remove-admin', adminRouteController_1.removeRouteAdmin);
+router.post('/routes/bulk-assign-admins', adminRouteController_1.bulkAssignRouteAdmins);
 // Test route for route admin endpoints
 router.get('/routes/test/endpoints', async (req, res) => {
     try {
@@ -220,15 +257,27 @@ router.get('/routes/test/endpoints', async (req, res) => {
                 'GET /api/admin/routes/stats - Route statistics',
                 'GET /api/admin/routes/pending - Pending routes',
                 'GET /api/admin/routes/fleet/:fleetId - Routes by fleet',
-                'POST /api/admin/routes - Create new route (NEW)',
+                'POST /api/admin/routes - Create new route',
                 'GET /api/admin/routes/:id - Get route by ID',
                 'PUT /api/admin/routes/:id/approve - Approve route',
                 'PUT /api/admin/routes/:id/reject - Reject route',
                 'PUT /api/admin/routes/:id - Update route',
                 'DELETE /api/admin/routes/:id - Delete route',
+                // NEW route admin endpoints
+                'GET /api/admin/routes/admin-assignments - Get all assignments',
+                'GET /api/admin/routes/unassigned - Get unassigned routes',
+                'PUT /api/admin/routes/:routeId/assign-admin - Assign route admin',
+                'DELETE /api/admin/routes/:routeId/remove-admin - Remove route admin',
+                'POST /api/admin/routes/bulk-assign-admins - Bulk assign admins',
                 'GET /api/admin/routes/test/endpoints - This test endpoint'
             ],
-            totalEndpoints: 11
+            totalEndpoints: 16,
+            newFeatures: [
+                'Route admin assignment management',
+                'Bulk route admin assignments',
+                'Unassigned routes tracking',
+                'Route admin assignment statistics'
+            ]
         });
     }
     catch (error) {
@@ -398,6 +447,64 @@ router.post('/ai/:moduleId/train', async (req, res) => {
     }
 });
 // ============================
+// ROUTE ADMIN DASHBOARD FOR SYSTEM ADMINS
+// ============================
+router.get('/route-admin-dashboard', async (req, res) => {
+    try {
+        // Mock dashboard data for route admin management overview
+        res.json({
+            message: 'Route Admin Management Dashboard',
+            timestamp: new Date().toISOString(),
+            summary: {
+                totalRoutes: 25,
+                assignedRoutes: 18,
+                unassignedRoutes: 7,
+                totalRouteAdmins: 12,
+                activeRouteAdmins: 10,
+                availableRouteAdmins: 2
+            },
+            recentAssignments: [
+                {
+                    id: 'assign1',
+                    routeName: 'Colombo - Kandy Express',
+                    routeAdminName: 'John Doe',
+                    assignedAt: new Date(Date.now() - 86400000),
+                    status: 'active'
+                },
+                {
+                    id: 'assign2',
+                    routeName: 'Galle - Matara Coastal',
+                    routeAdminName: 'Jane Smith',
+                    assignedAt: new Date(Date.now() - 172800000),
+                    status: 'active'
+                }
+            ],
+            pendingActions: [
+                {
+                    action: 'assign_admin',
+                    routeName: 'Negombo - Airport Express',
+                    priority: 'high',
+                    waitingDays: 3
+                },
+                {
+                    action: 'admin_training',
+                    routeAdminName: 'Mike Johnson',
+                    priority: 'medium',
+                    assignedRoute: 'Jaffna - Vavuniya Line'
+                }
+            ],
+            performance: {
+                avgAssignmentTime: 2.5, // days
+                successfulAssignments: 95.8, // percentage
+                adminSatisfactionScore: 4.2 // out of 5
+            }
+        });
+    }
+    catch (error) {
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+// ============================
 // UTILITY ROUTES
 // ============================
 router.post('/test/activity', async (req, res) => {
@@ -417,34 +524,47 @@ router.post('/test/activity', async (req, res) => {
 router.get('/docs', (req, res) => {
     res.json({
         message: 'Sri Express Admin API Documentation',
-        version: '3.2.0',
-        status: 'GPS Simulation System + Route Management + Admin Route Creation Fully Integrated!',
+        version: '4.0.0',
+        status: 'Route Admin Management System Fully Integrated!',
         endpoints: {
             users: 'User management endpoints (10 total)',
+            routeAdmins: 'Route admin management endpoints (6 total) - NEW!',
             devices: 'Device management endpoints (8 total)',
             fleet: 'Fleet management endpoints (13 total)',
-            routes: 'Route management endpoints (11 total - NOW WITH ADMIN CREATION)',
+            routes: 'Route management endpoints (16 total - UPDATED!)',
+            routeAssignments: 'Route admin assignment endpoints (5 total) - NEW!',
             simulation: 'GPS simulation endpoints (8 total)',
             ai: 'AI module endpoints (3 total)',
             emergency: 'Emergency management endpoints (7 total)',
             analytics: 'Analytics and reporting endpoints (5 total)'
         },
-        totalEndpoints: '71+',
-        newFeatures: [
-            '✅ Admin route creation system',
-            '✅ Complete route management system',
-            '✅ Route approval/rejection workflow',
-            '✅ Fleet-specific route filtering',
-            '✅ Route statistics and analytics',
-            '✅ Pending route management'
+        totalEndpoints: '81+',
+        newRouteAdminFeatures: [
+            'Create route admin accounts',
+            'Assign route admins to specific routes',
+            'Remove route admin assignments',
+            'Bulk assign multiple route admins',
+            'View all route admin assignments',
+            'Get unassigned routes',
+            'Route admin dashboard overview',
+            'Route admin performance tracking'
         ],
-        simulationFeatures: [
-            'Real-time GPS tracking simulation',
-            'Multiple vehicle support (5 vehicles)',
-            'Realistic Sri Lankan routes',
-            'Speed control (0.1x to 10x)',
-            'Individual vehicle control',
-            'Complete analytics and reporting'
+        workflow: [
+            '1. System admin creates routes via admin panel',
+            '2. System admin creates route admin accounts',
+            '3. System admin assigns route admins to specific routes',
+            '4. Route admin logs in and manages their assigned route',
+            '5. Route admin assigns vehicles from multiple fleets to their route',
+            '6. Route admin manages schedules and monitors performance',
+            '7. System admin can reassign or remove route admins anytime'
+        ],
+        keyCapabilities: [
+            'Full route admin lifecycle management',
+            'One-to-one route-admin assignment model',
+            'Route admins can assign vehicles from any approved fleet',
+            'Complete assignment tracking and history',
+            'Bulk operations for efficiency',
+            'Dashboard and analytics for system admins'
         ]
     });
 });
