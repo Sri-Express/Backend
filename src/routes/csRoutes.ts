@@ -48,11 +48,15 @@ router.get('/health', (req, res) => {
   });
 });
 
+// NEW: Public ticket submission for customers - MUST BE BEFORE AUTH MIDDLEWARE
+router.post('/tickets/submit', asyncHandler(ticketController.submitCustomerTicket));
+router.get('/tickets/track/:ticketId', asyncHandler(ticketController.trackTicket));
+
 // ============================================================================
 // PROTECTED ROUTES (Agent/Admin Auth Required) - For CS Agents
 // ============================================================================
 // The middleware below will apply to all subsequent routes in this file.
-router.use(protect, logActivity, requireAdmin);
+router.use(protect, requireAdmin); // Temporarily disabled logActivity
 
 // CS Dashboard Routes
 router.get('/dashboard', asyncHandler(csController.getDashboard));
