@@ -1,5 +1,6 @@
 // src/middleware/activityLogger.ts - FIXED VERSION
 import { Request, Response, NextFunction } from 'express';
+import mongoose from 'mongoose';
 import UserActivity from '../models/UserActivity';
 import { IUser } from '../models/User';
 
@@ -302,8 +303,11 @@ const logRequestActivity = async (
     }
 
     // Log the activity using the UserActivity model's static method
+    // Ensure _id is a proper ObjectId
+    const userId = typeof req.user._id === 'string' ? new mongoose.Types.ObjectId(req.user._id) : req.user._id;
+    
     await UserActivity.logActivity(
-      req.user._id,
+      userId,
       activityConfig.action,
       activityConfig.description,
       {
@@ -337,8 +341,10 @@ export const logLoginActivity = async (req: Request, res: Response, next: NextFu
 
       const userAgent = req.headers['user-agent'] || 'unknown';
 
+      const userId = typeof req.user._id === 'string' ? new mongoose.Types.ObjectId(req.user._id) : req.user._id;
+      
       await UserActivity.logActivity(
-        req.user._id,
+        userId,
         'login',
         'User logged in successfully',
         {
@@ -373,8 +379,10 @@ export const logLogoutActivity = async (req: Request, res: Response, next: NextF
 
       const userAgent = req.headers['user-agent'] || 'unknown';
 
+      const userId = typeof req.user._id === 'string' ? new mongoose.Types.ObjectId(req.user._id) : req.user._id;
+      
       await UserActivity.logActivity(
-        req.user._id,
+        userId,
         'logout',
         'User logged out',
         {
