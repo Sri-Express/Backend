@@ -68,7 +68,7 @@ export const getTickets = async (req: Request, res: Response): Promise<void> => 
         .skip(skip)
         .limit(limitNum)
         .populate('assignedAgent', 'name email role')
-        .populate('customer', 'name email phone')
+        .populate('customerId', 'name email phone')
         .populate('relatedBooking', 'bookingId travelDate passengerInfo')
         .populate('relatedRoute', 'name startLocation.name endLocation.name')
         .lean(),
@@ -117,54 +117,40 @@ export const getTicketById = async (req: Request, res: Response): Promise<void> 
   try {
     const { id } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-        const ticketByTicketId = await Ticket.findOne({ ticketId: id, isActive: true })
-            .populate('assignedAgent', 'name email role')
-            .populate('customer', 'name email phone')
-            .populate('relatedBooking', 'bookingId travelDate passengerInfo pricing')
-            .populate('relatedRoute', 'name startLocation endLocation distance')
-            .populate('timeline.agent', 'name role');
+    console.log('Fetching ticket with ID:', id);
 
-        if (!ticketByTicketId) {
-            res.status(404).json({ success: false, message: 'Ticket not found' });
-            return;
-        }
-        const relatedTickets = await Ticket.find({
-            customerId: ticketByTicketId.customerId,
-            _id: { $ne: ticketByTicketId._id },
-            isActive: true
-        }).select('ticketId subject status priority createdAt').sort({ createdAt: -1 }).limit(5);
-
-        res.json({ success: true, data: { ticket: ticketByTicketId, relatedTickets } });
-        return;
+    let ticket = null;
+    
+    // First, try to find by ObjectId
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      console.log('Searching by ObjectId');
+      ticket = await Ticket.findById(id)
+        .populate('assignedAgent', 'name email role')
+        .populate('customerId', 'name email phone')
+        .lean();
+    }
+    
+    // If not found by ObjectId, try by ticketId
+    if (!ticket) {
+      console.log('Searching by ticketId');
+      ticket = await Ticket.findOne({ ticketId: id, isActive: true })
+        .populate('assignedAgent', 'name email role')
+        .populate('customerId', 'name email phone')
+        .lean();
     }
 
-    const ticket = await Ticket.findById(id)
-    .populate('assignedAgent', 'name email role')
-    .populate('customer', 'name email phone')
-    .populate('relatedBooking', 'bookingId travelDate passengerInfo pricing')
-    .populate('relatedRoute', 'name startLocation endLocation distance')
-    .populate('timeline.agent', 'name role');
-
     if (!ticket || !ticket.isActive) {
+      console.log('Ticket not found or not active');
       res.status(404).json({ success: false, message: 'Ticket not found' });
       return;
     }
 
-    const relatedTickets = await Ticket.find({
-      customerId: ticket.customerId,
-      _id: { $ne: ticket._id },
-      isActive: true
-    })
-    .select('ticketId subject status priority createdAt')
-    .sort({ createdAt: -1 })
-    .limit(5);
-
+    console.log('Found ticket:', ticket.ticketId || ticket._id);
     res.json({
       success: true,
       data: {
         ticket,
-        relatedTickets
+        relatedTickets: []
       }
     });
 
@@ -257,7 +243,7 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
 
     await ticket.populate([
       { path: 'assignedAgent', select: 'name email role' },
-      { path: 'customer', select: 'name email phone' },
+      { path: 'customerId', select: 'name email phone' },
       { path: 'relatedBooking', select: 'bookingId travelDate' },
       { path: 'relatedRoute', select: 'name startLocation.name endLocation.name' }
     ]);
@@ -348,7 +334,7 @@ export const updateTicket = async (req: AuthenticatedRequest, res: Response): Pr
 
     await ticket.populate([
       { path: 'assignedAgent', select: 'name email role' },
-      { path: 'customer', select: 'name email phone' },
+      { path: 'customerId', select: 'name email phone' },
       { path: 'timeline.agent', select: 'name role' }
     ]);
 
@@ -603,6 +589,13 @@ export const resolveTicket = async (req: AuthenticatedRequest, res: Response): P
       { path: 'resolution.resolvedBy', select: 'name role' }
     ]);
 
+    // Create notification for customer
+    try {
+      console.log(`Notification: Ticket ${ticket.ticketId} has been resolved for customer ${ticket.customerInfo.email}`);
+    } catch (notificationError) {
+      console.error('Failed to create notification:', notificationError);
+    }
+
     res.json({
       success: true,
       message: 'Ticket resolved successfully',
@@ -768,6 +761,160 @@ export const getTicketStats = async (req: Request, res: Response): Promise<void>
   }
 };
 
+// Submit ticket from customer (public endpoint)
+export const submitCustomerTicket = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      name,
+      email,
+      phone,
+      subject,
+      message,
+      category = 'general'
+    } = req.body;
+
+    if (!name || !email || !subject || !message) {
+      res.status(400).json({
+        success: false,
+        message: 'Name, email, subject, and message are required'
+      });
+      return;
+    }
+
+    // Find or create customer
+    let customer = await User.findOne({ email });
+    if (!customer) {
+      customer = new User({
+        name,
+        email,
+        phone,
+        role: 'client',
+        password: 'temp_password_' + Date.now(), // Temporary password
+        isActive: true
+      });
+      await customer.save();
+    }
+
+    // Generate unique ticket ID
+    const ticketCount = await Ticket.countDocuments();
+    const ticketId = `TKT${Date.now().toString().slice(-6)}${(ticketCount + 1).toString().padStart(4, '0')}`;
+
+    // Create ticket
+    const ticket = new Ticket({
+      ticketId,
+      customerId: customer._id,
+      subject: subject.trim(),
+      description: message.trim(),
+      category,
+      priority: 'medium',
+      tags: ['customer_submitted'],
+      customerInfo: {
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone || phone || '',
+        previousTickets: await Ticket.countDocuments({ 
+          customerId: customer._id,
+          isActive: true 
+        })
+      },
+      timeline: [{
+        action: 'created',
+        timestamp: new Date(),
+        note: 'Ticket submitted by customer',
+        systemGenerated: true
+      }]
+    });
+
+    await ticket.save();
+
+    // Send confirmation email (optional)
+    try {
+      // Import and use your email service here if available
+      // await sendEmail(customer.email, 'Ticket Submitted', `Your ticket ${ticket.ticketId} has been received.`);
+    } catch (emailError) {
+      console.error('Failed to send confirmation email:', emailError);
+      // Don't fail the request if email fails
+    }
+
+    // Create notification for customer
+    try {
+      // You can integrate with your notification system here
+      // For now, we'll just log it
+      console.log(`Notification: New ticket ${ticket.ticketId} created for customer ${customer.email}`);
+    } catch (notificationError) {
+      console.error('Failed to create notification:', notificationError);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Support ticket submitted successfully',
+      data: {
+        ticketId: ticket.ticketId,
+        status: ticket.status,
+        estimatedResponse: '2-4 hours',
+        trackingUrl: `/support?ticket=${ticket.ticketId}`
+      }
+    });
+
+  } catch (error) {
+    console.error('Submit customer ticket error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to submit ticket',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
+// Track ticket by ticket ID (public endpoint)
+export const trackTicket = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { ticketId } = req.params;
+
+    const ticket = await Ticket.findOne({ 
+      ticketId, 
+      isActive: true 
+    })
+    .select('ticketId subject status priority category createdAt timeline customerInfo')
+    .lean();
+
+    if (!ticket) {
+      res.status(404).json({
+        success: false,
+        message: 'Ticket not found'
+      });
+      return;
+    }
+
+    // Filter timeline to show only customer-relevant updates
+    const customerTimeline = ticket.timeline.filter(entry => 
+      ['created', 'assigned', 'status_changed', 'resolved', 'closed'].includes(entry.action)
+    );
+
+    res.json({
+      success: true,
+      data: {
+        ticketId: ticket.ticketId,
+        subject: ticket.subject,
+        status: ticket.status,
+        priority: ticket.priority,
+        category: ticket.category,
+        submittedAt: ticket.createdAt,
+        timeline: customerTimeline,
+        estimatedResponse: ticket.status === 'open' ? '2-4 hours' : null
+      }
+    });
+
+  } catch (error) {
+    console.error('Track ticket error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to track ticket',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
 export default {
   getTickets,
   getTicketById,
@@ -778,5 +925,7 @@ export default {
   escalateTicket,
   resolveTicket,
   closeTicket,
-  getTicketStats
+  getTicketStats,
+  submitCustomerTicket,
+  trackTicket
 };
