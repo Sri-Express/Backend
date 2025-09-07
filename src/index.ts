@@ -371,11 +371,12 @@ app.use('/api/cs', csRoutes);
 // Weather routes
 app.use('/api/weather', weatherRoutes);
 
+// Route admin routes
+app.use('/api/route-admin', routeAdminRoutes);
+
 // Error handling middleware
 app.use(notFound);
 app.use(errorHandler);
-
-app.use('/api/route-admin', routeAdminRoutes);
 
 
 // Global error handler for uncaught exceptions
