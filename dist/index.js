@@ -344,10 +344,11 @@ app.use('/api/fleet', fleetRoutes_1.default); // ← ADD THIS LINE
 app.use('/api/cs', csRoutes_1.default);
 // Weather routes
 app.use('/api/weather', weatherRoutes_1.default);
+// Route admin routes
+app.use('/api/route-admin', routeAdminRoutes_1.default);
 // Error handling middleware
 app.use(errorMiddleware_1.notFound);
 app.use(errorMiddleware_1.errorHandler);
-app.use('/api/route-admin', routeAdminRoutes_1.default);
 // Global error handler for uncaught exceptions
 process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:', error);

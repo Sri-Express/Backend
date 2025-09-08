@@ -48,11 +48,37 @@ const getChatSessions = async (req, res) => {
             Chat_1.default.find(filter).sort(sort).skip(skip).limit(limitNum).populate('assignedAgent', 'name email role').populate('customer', 'name email phone').lean(),
             Chat_1.default.countDocuments(filter)
         ]);
+        // Add agent ratings to each chat session
+        const chatsWithRatings = await Promise.all(chats.map(async (chat) => {
+            if (chat.assignedAgent) {
+                const agentStats = await Chat_1.default.aggregate([
+                    {
+                        $match: {
+                            assignedAgent: chat.assignedAgent._id,
+                            'feedback.rating': { $exists: true },
+                            isActive: true
+                        }
+                    },
+                    {
+                        $group: {
+                            _id: null,
+                            avgRating: { $avg: '$feedback.rating' },
+                            totalRatings: { $sum: 1 }
+                        }
+                    }
+                ]);
+                if (agentStats.length > 0) {
+                    chat.assignedAgent.rating = Math.round(agentStats[0].avgRating * 10) / 10;
+                    chat.assignedAgent.totalRatings = agentStats[0].totalRatings;
+                }
+            }
+            return chat;
+        }));
         const totalPages = Math.ceil(total / limitNum);
         res.json({
             success: true,
             data: {
-                sessions: chats,
+                sessions: chatsWithRatings,
                 pagination: { current: pageNum, pages: totalPages, total, hasNext: pageNum < totalPages, hasPrev: pageNum > 1 },
                 filters: { status, assignedAgent, channel, search, dateFrom, dateTo }
             }
@@ -74,11 +100,46 @@ const getChatById = async (req, res) => {
             .populate('relatedTicket', 'ticketId subject status');
         if (!chat)
             return res.status(404).json({ success: false, message: 'Chat session not found' });
+        // Get agent rating if agent is assigned
+        let agentRating = null;
+        if (chat.assignedAgent) {
+            const agentStats = await Chat_1.default.aggregate([
+                {
+                    $match: {
+                        assignedAgent: chat.assignedAgent._id,
+                        'feedback.rating': { $exists: true },
+                        isActive: true
+                    }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        avgRating: { $avg: '$feedback.rating' },
+                        totalRatings: { $sum: 1 },
+                        avgResponseTime: { $avg: '$sessionMetrics.responseTime.averageAgent' }
+                    }
+                }
+            ]);
+            if (agentStats.length > 0) {
+                agentRating = {
+                    rating: Math.round(agentStats[0].avgRating * 10) / 10, // Round to 1 decimal
+                    totalRatings: agentStats[0].totalRatings,
+                    responseTime: agentStats[0].avgResponseTime || 60 // Default 60s if no data
+                };
+            }
+        }
         // Get customer's previous chats
         const previousChats = await Chat_1.default.find({ customerId: chat.customerId, _id: { $ne: chat._id }, isActive: true })
             .select('sessionId status startedAt endedAt duration feedback.rating')
             .sort({ startedAt: -1 })
             .limit(5);
+        // Add agent rating to assignedAgent object
+        if (chat.assignedAgent && agentRating) {
+            chat.assignedAgent = {
+                ...JSON.parse(JSON.stringify(chat.assignedAgent)),
+                ...agentRating
+            };
+        }
         res.json({ success: true, data: { chat, previousChats } });
     }
     catch (error) {

@@ -257,6 +257,8 @@ UserSchema.virtual('daysSinceLastLogin').get(function () {
 });
 // Virtual for account age in days
 UserSchema.virtual('accountAge').get(function () {
+    if (!this.createdAt)
+        return 0;
     const diffTime = Math.abs(new Date().getTime() - this.createdAt.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;

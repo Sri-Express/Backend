@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAnalytics = exports.getAgentWorkload = exports.getDashboard = void 0;
+exports.addCustomerNote = exports.getCustomerProfile = exports.getAnalytics = exports.getAgentWorkload = exports.getDashboard = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 const User_1 = __importDefault(require("../models/User"));
 const Ticket_1 = __importDefault(require("../models/Ticket"));
@@ -74,22 +74,56 @@ const getDashboard = async (req, res) => {
                     }
                 }
             ]),
-            // Customer satisfaction metrics
-            Ticket_1.default.aggregate([
-                {
-                    $match: {
-                        'resolution.customerSatisfaction': { $exists: true },
-                        'resolution.resolvedAt': { $gte: startDate }
+            // Agent-specific satisfaction metrics (combine tickets and chats)
+            Promise.all([
+                // Agent's ticket satisfaction
+                Ticket_1.default.aggregate([
+                    {
+                        $match: {
+                            assignedAgent: new mongoose_1.default.Types.ObjectId(agentId),
+                            'resolution.customerSatisfaction': { $exists: true },
+                            'resolution.resolvedAt': { $gte: startDate }
+                        }
+                    },
+                    {
+                        $group: {
+                            _id: null,
+                            avgSatisfaction: { $avg: '$resolution.customerSatisfaction' },
+                            totalRatings: { $sum: 1 }
+                        }
                     }
-                },
-                {
-                    $group: {
-                        _id: null,
-                        avgSatisfaction: { $avg: '$resolution.customerSatisfaction' },
-                        totalRatings: { $sum: 1 }
+                ]),
+                // Agent's chat satisfaction
+                Chat_1.default.aggregate([
+                    {
+                        $match: {
+                            assignedAgent: new mongoose_1.default.Types.ObjectId(agentId),
+                            'feedback.rating': { $exists: true },
+                            endedAt: { $gte: startDate }
+                        }
+                    },
+                    {
+                        $group: {
+                            _id: null,
+                            avgSatisfaction: { $avg: '$feedback.rating' },
+                            totalRatings: { $sum: 1 }
+                        }
                     }
+                ])
+            ]).then(([ticketSat, chatSat]) => {
+                var _a, _b, _c, _d;
+                const ticketAvg = ((_a = ticketSat[0]) === null || _a === void 0 ? void 0 : _a.avgSatisfaction) || 0;
+                const ticketCount = ((_b = ticketSat[0]) === null || _b === void 0 ? void 0 : _b.totalRatings) || 0;
+                const chatAvg = ((_c = chatSat[0]) === null || _c === void 0 ? void 0 : _c.avgSatisfaction) || 0;
+                const chatCount = ((_d = chatSat[0]) === null || _d === void 0 ? void 0 : _d.totalRatings) || 0;
+                if (ticketCount === 0 && chatCount === 0) {
+                    return { avgSatisfaction: 0, totalRatings: 0 };
                 }
-            ])
+                // Weighted average of ticket and chat satisfaction
+                const totalRatings = ticketCount + chatCount;
+                const weightedAvg = (ticketAvg * ticketCount + chatAvg * chatCount) / totalRatings;
+                return { avgSatisfaction: weightedAvg, totalRatings };
+            })
         ]);
         // Process ticket stats
         const ticketSummary = {
@@ -133,7 +167,7 @@ const getDashboard = async (req, res) => {
                         assignedTickets: agentTickets,
                         activeChats: agentChats
                     },
-                    satisfaction: customerSatisfaction[0] || { avgSatisfaction: 0, totalRatings: 0 }
+                    satisfaction: customerSatisfaction || { avgSatisfaction: 0, totalRatings: 0 }
                 },
                 performance: agentPerformance,
                 queues: priorityQueues,
@@ -539,8 +573,202 @@ const getOverviewAnalytics = async (startDate) => {
         categoryBreakdown
     };
 };
+// Get Customer Profile
+const getCustomerProfile = async (req, res) => {
+    try {
+        const { id } = req.params;
+        // Find customer by ID (either real user ID or chat session ID)
+        let customer;
+        let customerInfo;
+        // First try to find as a real user
+        if (mongoose_1.default.Types.ObjectId.isValid(id)) {
+            customer = await User_1.default.findById(id);
+        }
+        if (!customer) {
+            // If not found as user, try to find from chat sessions
+            const chatSession = await Chat_1.default.findOne({
+                $or: [{ customerId: id }, { _id: id }],
+                isActive: true
+            }).populate('customerId');
+            if (chatSession) {
+                customerInfo = {
+                    id: chatSession.customerId.toString(),
+                    name: chatSession.customerInfo.name,
+                    email: chatSession.customerInfo.email,
+                    phone: chatSession.customerInfo.phone,
+                    location: chatSession.customerInfo.location,
+                    registrationDate: chatSession.createdAt,
+                    lastActive: chatSession.updatedAt,
+                    status: 'active'
+                };
+            }
+            else {
+                return res.status(404).json({ success: false, message: 'Customer not found' });
+            }
+        }
+        else {
+            customerInfo = {
+                id: customer._id.toString(),
+                name: customer.name,
+                email: customer.email,
+                phone: customer.phone,
+                location: customer.location || 'N/A',
+                registrationDate: customer.createdAt,
+                lastActive: customer.updatedAt || customer.lastLogin || customer.createdAt,
+                status: customer.isActive ? 'active' : 'inactive'
+            };
+        }
+        const customerId = customerInfo.id;
+        // Get customer's chat history
+        const chatHistory = await Chat_1.default.find({
+            customerId: customerId,
+            isActive: true
+        })
+            .populate('assignedAgent', 'name')
+            .sort({ startedAt: -1 })
+            .select('sessionId status startedAt endedAt duration feedback messages');
+        // Get customer's ticket history  
+        const ticketHistory = await Ticket_1.default.find({
+            $or: [
+                { customerId: customerId },
+                { 'customerInfo.email': customerInfo.email }
+            ],
+            isActive: true
+        })
+            .populate('assignedAgent', 'name')
+            .sort({ createdAt: -1 })
+            .select('ticketId subject status priority createdAt resolution.resolvedAt assignedAgent');
+        // Get customer notes (we'll create a simple notes system)
+        const customerNotes = await UserActivity_1.default.find({
+            category: 'customer_note',
+            'metadata.customerId': customerId
+        })
+            .populate('userId', 'name')
+            .sort({ timestamp: -1 })
+            .limit(20);
+        // Calculate satisfaction metrics
+        const satisfactionData = await Chat_1.default.aggregate([
+            {
+                $match: {
+                    customerId: new mongoose_1.default.Types.ObjectId(customerId),
+                    'feedback.rating': { $exists: true }
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    avgRating: { $avg: '$feedback.rating' },
+                    totalFeedback: { $sum: 1 }
+                }
+            }
+        ]);
+        const satisfaction = satisfactionData[0] || { avgRating: 0, totalFeedback: 0 };
+        // Format the data
+        const profileData = {
+            ...customerInfo,
+            previousChats: chatHistory.map(chat => {
+                var _a;
+                return ({
+                    _id: chat._id,
+                    sessionId: chat.sessionId,
+                    status: chat.status,
+                    startedAt: chat.startedAt,
+                    endedAt: chat.endedAt,
+                    duration: chat.duration || 0,
+                    assignedAgent: chat.assignedAgent,
+                    feedback: chat.feedback,
+                    messageCount: ((_a = chat.messages) === null || _a === void 0 ? void 0 : _a.length) || 0
+                });
+            }),
+            tickets: ticketHistory.map(ticket => {
+                var _a;
+                return ({
+                    _id: ticket._id,
+                    ticketId: ticket.ticketId,
+                    subject: ticket.subject,
+                    status: ticket.status,
+                    priority: ticket.priority,
+                    createdAt: ticket.createdAt,
+                    resolvedAt: (_a = ticket.resolution) === null || _a === void 0 ? void 0 : _a.resolvedAt,
+                    assignedAgent: ticket.assignedAgent
+                });
+            }),
+            satisfaction,
+            notes: customerNotes.map(note => {
+                var _a;
+                return ({
+                    _id: note._id,
+                    content: note.action, // Using action field as note content
+                    addedBy: note.userId,
+                    addedAt: note.timestamp,
+                    type: ((_a = note.metadata) === null || _a === void 0 ? void 0 : _a.noteType) || 'general'
+                });
+            })
+        };
+        res.json({
+            success: true,
+            data: profileData
+        });
+    }
+    catch (error) {
+        console.error('Get customer profile error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch customer profile',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+};
+exports.getCustomerProfile = getCustomerProfile;
+// Add Customer Note
+const addCustomerNote = async (req, res) => {
+    var _a;
+    try {
+        const { id } = req.params;
+        const { content, noteType = 'general' } = req.body;
+        const agentId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+        if (!content || content.trim().length === 0) {
+            return res.status(400).json({ success: false, message: 'Note content is required' });
+        }
+        // Create a customer note using UserActivity model
+        const noteActivity = new UserActivity_1.default({
+            userId: agentId,
+            category: 'customer_note',
+            action: content,
+            metadata: {
+                customerId: id,
+                noteType: noteType
+            }
+        });
+        await noteActivity.save();
+        await noteActivity.populate('userId', 'name');
+        const noteResponse = {
+            _id: noteActivity._id,
+            content: noteActivity.action,
+            addedBy: noteActivity.userId,
+            addedAt: noteActivity.timestamp,
+            type: noteType
+        };
+        res.json({
+            success: true,
+            message: 'Note added successfully',
+            data: noteResponse
+        });
+    }
+    catch (error) {
+        console.error('Add customer note error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to add customer note',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+};
+exports.addCustomerNote = addCustomerNote;
 exports.default = {
     getDashboard: exports.getDashboard,
     getAgentWorkload: exports.getAgentWorkload,
-    getAnalytics: exports.getAnalytics
+    getAnalytics: exports.getAnalytics,
+    getCustomerProfile: exports.getCustomerProfile,
+    addCustomerNote: exports.addCustomerNote
 };

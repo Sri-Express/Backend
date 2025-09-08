@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.logLogoutActivity = exports.logLoginActivity = exports.logActivity = void 0;
+const mongoose_1 = __importDefault(require("mongoose"));
 const UserActivity_1 = __importDefault(require("../models/UserActivity"));
 // Activity mapping for different routes and methods
 const ACTIVITY_MAPPINGS = {
@@ -259,7 +260,9 @@ const logRequestActivity = async (req, ipAddress, userAgent, responseBody) => {
             metadata.createdId = ((_b = responseBody.user) === null || _b === void 0 ? void 0 : _b._id) || responseBody._id;
         }
         // Log the activity using the UserActivity model's static method
-        await UserActivity_1.default.logActivity(req.user._id, activityConfig.action, activityConfig.description, {
+        // Ensure _id is a proper ObjectId
+        const userId = typeof req.user._id === 'string' ? new mongoose_1.default.Types.ObjectId(req.user._id) : req.user._id;
+        await UserActivity_1.default.logActivity(userId, activityConfig.action, activityConfig.description, {
             ipAddress,
             userAgent,
             metadata,
@@ -286,7 +289,8 @@ const logLoginActivity = async (req, res, next) => {
                 ((_a = req.headers['x-forwarded-for']) === null || _a === void 0 ? void 0 : _a.split(',')[0]) ||
                 'unknown';
             const userAgent = req.headers['user-agent'] || 'unknown';
-            await UserActivity_1.default.logActivity(req.user._id, 'login', 'User logged in successfully', {
+            const userId = typeof req.user._id === 'string' ? new mongoose_1.default.Types.ObjectId(req.user._id) : req.user._id;
+            await UserActivity_1.default.logActivity(userId, 'login', 'User logged in successfully', {
                 ipAddress,
                 userAgent,
                 category: 'auth',
@@ -316,7 +320,8 @@ const logLogoutActivity = async (req, res, next) => {
                 ((_a = req.headers['x-forwarded-for']) === null || _a === void 0 ? void 0 : _a.split(',')[0]) ||
                 'unknown';
             const userAgent = req.headers['user-agent'] || 'unknown';
-            await UserActivity_1.default.logActivity(req.user._id, 'logout', 'User logged out', {
+            const userId = typeof req.user._id === 'string' ? new mongoose_1.default.Types.ObjectId(req.user._id) : req.user._id;
+            await UserActivity_1.default.logActivity(userId, 'logout', 'User logged out', {
                 ipAddress,
                 userAgent,
                 category: 'auth',
