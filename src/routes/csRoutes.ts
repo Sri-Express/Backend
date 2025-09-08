@@ -63,6 +63,10 @@ router.get('/dashboard', asyncHandler(csController.getDashboard));
 router.get('/dashboard/workload', asyncHandler(csController.getAgentWorkload));
 router.get('/dashboard/analytics', asyncHandler(csController.getAnalytics));
 
+// Customer Profile Routes
+router.get('/customers/:id', asyncHandler(csController.getCustomerProfile));
+router.post('/customers/:id/notes', asyncHandler(csController.addCustomerNote));
+
 // Ticket Management Routes
 router.get('/tickets', asyncHandler(ticketController.getTickets));
 router.post('/tickets', asyncHandler(ticketController.createTicket));
