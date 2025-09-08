@@ -87,22 +87,58 @@ export const getDashboard = async (req: Request, res: Response) => {
         }
       ]),
 
-      // Customer satisfaction metrics
-      Ticket.aggregate([
-        { 
-          $match: { 
-            'resolution.customerSatisfaction': { $exists: true },
-            'resolution.resolvedAt': { $gte: startDate }
-          } 
-        },
-        {
-          $group: {
-            _id: null,
-            avgSatisfaction: { $avg: '$resolution.customerSatisfaction' },
-            totalRatings: { $sum: 1 }
+      // Agent-specific satisfaction metrics (combine tickets and chats)
+      Promise.all([
+        // Agent's ticket satisfaction
+        Ticket.aggregate([
+          { 
+            $match: { 
+              assignedAgent: new mongoose.Types.ObjectId(agentId),
+              'resolution.customerSatisfaction': { $exists: true },
+              'resolution.resolvedAt': { $gte: startDate }
+            } 
+          },
+          {
+            $group: {
+              _id: null,
+              avgSatisfaction: { $avg: '$resolution.customerSatisfaction' },
+              totalRatings: { $sum: 1 }
+            }
           }
+        ]),
+        // Agent's chat satisfaction
+        Chat.aggregate([
+          { 
+            $match: { 
+              assignedAgent: new mongoose.Types.ObjectId(agentId),
+              'feedback.rating': { $exists: true },
+              endedAt: { $gte: startDate }
+            } 
+          },
+          {
+            $group: {
+              _id: null,
+              avgSatisfaction: { $avg: '$feedback.rating' },
+              totalRatings: { $sum: 1 }
+            }
+          }
+        ])
+      ]).then(([ticketSat, chatSat]) => {
+        const ticketAvg = ticketSat[0]?.avgSatisfaction || 0;
+        const ticketCount = ticketSat[0]?.totalRatings || 0;
+        const chatAvg = chatSat[0]?.avgSatisfaction || 0;
+        const chatCount = chatSat[0]?.totalRatings || 0;
+        
+        if (ticketCount === 0 && chatCount === 0) {
+          return { avgSatisfaction: 0, totalRatings: 0 };
         }
-      ])
+        
+        // Weighted average of ticket and chat satisfaction
+        const totalRatings = ticketCount + chatCount;
+        const weightedAvg = (ticketAvg * ticketCount + chatAvg * chatCount) / totalRatings;
+        
+        return { avgSatisfaction: weightedAvg, totalRatings };
+      })
     ]);
 
     // Process ticket stats
@@ -153,7 +189,7 @@ export const getDashboard = async (req: Request, res: Response) => {
             assignedTickets: agentTickets,
             activeChats: agentChats
           },
-          satisfaction: customerSatisfaction[0] || { avgSatisfaction: 0, totalRatings: 0 }
+          satisfaction: customerSatisfaction || { avgSatisfaction: 0, totalRatings: 0 }
         },
         performance: agentPerformance,
         queues: priorityQueues,
@@ -590,8 +626,207 @@ const getOverviewAnalytics = async (startDate: Date) => {
   };
 };
 
+// Get Customer Profile
+export const getCustomerProfile = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    // Find customer by ID (either real user ID or chat session ID)
+    let customer;
+    let customerInfo;
+    
+    // First try to find as a real user
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      customer = await User.findById(id);
+    }
+    
+    if (!customer) {
+      // If not found as user, try to find from chat sessions
+      const chatSession = await Chat.findOne({
+        $or: [{ customerId: id }, { _id: id }],
+        isActive: true
+      }).populate('customerId');
+      
+      if (chatSession) {
+        customerInfo = {
+          id: chatSession.customerId.toString(),
+          name: chatSession.customerInfo.name,
+          email: chatSession.customerInfo.email,
+          phone: chatSession.customerInfo.phone,
+          location: chatSession.customerInfo.location,
+          registrationDate: chatSession.createdAt,
+          lastActive: chatSession.updatedAt,
+          status: 'active'
+        };
+      } else {
+        return res.status(404).json({ success: false, message: 'Customer not found' });
+      }
+    } else {
+      customerInfo = {
+        id: customer._id.toString(),
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        location: (customer as any).location || 'N/A',
+        registrationDate: customer.createdAt,
+        lastActive: customer.updatedAt || customer.lastLogin || customer.createdAt,
+        status: customer.isActive ? 'active' : 'inactive'
+      };
+    }
+
+    const customerId = customerInfo.id;
+
+    // Get customer's chat history
+    const chatHistory = await Chat.find({
+      customerId: customerId,
+      isActive: true
+    })
+    .populate('assignedAgent', 'name')
+    .sort({ startedAt: -1 })
+    .select('sessionId status startedAt endedAt duration feedback messages');
+
+    // Get customer's ticket history  
+    const ticketHistory = await Ticket.find({
+      $or: [
+        { customerId: customerId },
+        { 'customerInfo.email': customerInfo.email }
+      ],
+      isActive: true
+    })
+    .populate('assignedAgent', 'name')
+    .sort({ createdAt: -1 })
+    .select('ticketId subject status priority createdAt resolution.resolvedAt assignedAgent');
+
+    // Get customer notes (we'll create a simple notes system)
+    const customerNotes = await UserActivity.find({
+      category: 'customer_note',
+      'metadata.customerId': customerId
+    })
+    .populate('userId', 'name')
+    .sort({ timestamp: -1 })
+    .limit(20);
+
+    // Calculate satisfaction metrics
+    const satisfactionData = await Chat.aggregate([
+      { 
+        $match: { 
+          customerId: new mongoose.Types.ObjectId(customerId),
+          'feedback.rating': { $exists: true }
+        } 
+      },
+      {
+        $group: {
+          _id: null,
+          avgRating: { $avg: '$feedback.rating' },
+          totalFeedback: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const satisfaction = satisfactionData[0] || { avgRating: 0, totalFeedback: 0 };
+
+    // Format the data
+    const profileData = {
+      ...customerInfo,
+      previousChats: chatHistory.map(chat => ({
+        _id: chat._id,
+        sessionId: chat.sessionId,
+        status: chat.status,
+        startedAt: chat.startedAt,
+        endedAt: chat.endedAt,
+        duration: chat.duration || 0,
+        assignedAgent: chat.assignedAgent,
+        feedback: chat.feedback,
+        messageCount: chat.messages?.length || 0
+      })),
+      tickets: ticketHistory.map(ticket => ({
+        _id: ticket._id,
+        ticketId: ticket.ticketId,
+        subject: ticket.subject,
+        status: ticket.status,
+        priority: ticket.priority,
+        createdAt: ticket.createdAt,
+        resolvedAt: ticket.resolution?.resolvedAt,
+        assignedAgent: ticket.assignedAgent
+      })),
+      satisfaction,
+      notes: customerNotes.map(note => ({
+        _id: note._id,
+        content: note.action, // Using action field as note content
+        addedBy: note.userId,
+        addedAt: note.timestamp,
+        type: note.metadata?.noteType || 'general'
+      }))
+    };
+
+    res.json({
+      success: true,
+      data: profileData
+    });
+
+  } catch (error) {
+    console.error('Get customer profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch customer profile',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
+// Add Customer Note
+export const addCustomerNote = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { content, noteType = 'general' } = req.body;
+    const agentId = req.user?.id;
+
+    if (!content || content.trim().length === 0) {
+      return res.status(400).json({ success: false, message: 'Note content is required' });
+    }
+
+    // Create a customer note using UserActivity model
+    const noteActivity = new UserActivity({
+      userId: agentId,
+      category: 'customer_note',
+      action: content,
+      metadata: {
+        customerId: id,
+        noteType: noteType
+      }
+    });
+
+    await noteActivity.save();
+    await noteActivity.populate('userId', 'name');
+
+    const noteResponse = {
+      _id: noteActivity._id,
+      content: noteActivity.action,
+      addedBy: noteActivity.userId,
+      addedAt: noteActivity.timestamp,
+      type: noteType
+    };
+
+    res.json({
+      success: true,
+      message: 'Note added successfully',
+      data: noteResponse
+    });
+
+  } catch (error) {
+    console.error('Add customer note error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to add customer note',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
 export default {
   getDashboard,
   getAgentWorkload,
-  getAnalytics
+  getAnalytics,
+  getCustomerProfile,
+  addCustomerNote
 };
