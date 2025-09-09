@@ -173,6 +173,85 @@ const DeviceSchema = new mongoose_1.Schema({
                 type: String,
             }],
     },
+    documents: {
+        vehicleRegistration: {
+            uploaded: {
+                type: Boolean,
+                default: false,
+            },
+            fileName: {
+                type: String,
+                trim: true,
+            },
+            uploadDate: {
+                type: Date,
+            },
+        },
+        insurance: {
+            uploaded: {
+                type: Boolean,
+                default: false,
+            },
+            fileName: {
+                type: String,
+                trim: true,
+            },
+            uploadDate: {
+                type: Date,
+            },
+            expiryDate: {
+                type: Date,
+            },
+        },
+        safetyInspection: {
+            uploaded: {
+                type: Boolean,
+                default: false,
+            },
+            fileName: {
+                type: String,
+                trim: true,
+            },
+            uploadDate: {
+                type: Date,
+            },
+            expiryDate: {
+                type: Date,
+            },
+        },
+        revenueLicense: {
+            uploaded: {
+                type: Boolean,
+                default: false,
+            },
+            fileName: {
+                type: String,
+                trim: true,
+            },
+            uploadDate: {
+                type: Date,
+            },
+            expiryDate: {
+                type: Date,
+            },
+        },
+        additionalFiles: [{
+                name: {
+                    type: String,
+                    required: true,
+                    trim: true,
+                },
+                fileName: {
+                    type: String,
+                    required: true,
+                    trim: true,
+                },
+                uploadDate: {
+                    type: Date,
+                    default: Date.now,
+                },
+            }],
+    },
     isActive: {
         type: Boolean,
         default: true,

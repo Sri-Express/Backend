@@ -42,6 +42,36 @@ export interface IDevice extends Document {
     count: number;
     messages: string[];
   };
+  documents?: {
+    vehicleRegistration?: {
+      uploaded: boolean;
+      fileName?: string;
+      uploadDate?: Date;
+    };
+    insurance?: {
+      uploaded: boolean;
+      fileName?: string;
+      uploadDate?: Date;
+      expiryDate?: Date;
+    };
+    safetyInspection?: {
+      uploaded: boolean;
+      fileName?: string;
+      uploadDate?: Date;
+      expiryDate?: Date;
+    };
+    revenueLicense?: {
+      uploaded: boolean;
+      fileName?: string;
+      uploadDate?: Date;
+      expiryDate?: Date;
+    };
+    additionalFiles?: Array<{
+      name: string;
+      fileName: string;
+      uploadDate: Date;
+    }>;
+  };
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -190,6 +220,85 @@ const DeviceSchema = new Schema<IDevice>(
       },
       messages: [{
         type: String,
+      }],
+    },
+    documents: {
+      vehicleRegistration: {
+        uploaded: {
+          type: Boolean,
+          default: false,
+        },
+        fileName: {
+          type: String,
+          trim: true,
+        },
+        uploadDate: {
+          type: Date,
+        },
+      },
+      insurance: {
+        uploaded: {
+          type: Boolean,
+          default: false,
+        },
+        fileName: {
+          type: String,
+          trim: true,
+        },
+        uploadDate: {
+          type: Date,
+        },
+        expiryDate: {
+          type: Date,
+        },
+      },
+      safetyInspection: {
+        uploaded: {
+          type: Boolean,
+          default: false,
+        },
+        fileName: {
+          type: String,
+          trim: true,
+        },
+        uploadDate: {
+          type: Date,
+        },
+        expiryDate: {
+          type: Date,
+        },
+      },
+      revenueLicense: {
+        uploaded: {
+          type: Boolean,
+          default: false,
+        },
+        fileName: {
+          type: String,
+          trim: true,
+        },
+        uploadDate: {
+          type: Date,
+        },
+        expiryDate: {
+          type: Date,
+        },
+      },
+      additionalFiles: [{
+        name: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        fileName: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        uploadDate: {
+          type: Date,
+          default: Date.now,
+        },
       }],
     },
     isActive: {

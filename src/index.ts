@@ -45,6 +45,7 @@ import csRoutes from './routes/csRoutes';  // ⭐ NEW - Customer Service Routes
 import weatherRoutes from './routes/weatherRoutes';  // ⭐ ADD THIS LINE
 import routeAdminRoutes from './routes/routeAdminRoutes';
 import slotRoutes from './routes/slotRoutes';  // ⭐ NEW - Slot-based scheduling
+import vehicleDocumentRoutes from './routes/vehicleDocumentRoutes';  // ⭐ NEW - Vehicle Document Upload
 
 
 // Import middleware
@@ -212,6 +213,54 @@ app.get('/test-emergency', async (req, res) => {
   }
 });
 
+// AWS S3 connection test endpoint
+app.get('/test-s3', async (req, res) => {
+  try {
+    const AWS = require('aws-sdk');
+    
+    // Test AWS configuration
+    const s3 = new AWS.S3({
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      region: process.env.AWS_REGION || 'us-east-1'
+    });
+    
+    const bucketName = process.env.AWS_S3_BUCKET_NAME || 'sriexpress';
+    
+    // Try to list objects in the bucket (just to test connection)
+    const result = await s3.listObjectsV2({
+      Bucket: bucketName,
+      MaxKeys: 1
+    }).promise();
+    
+    res.json({
+      message: 'AWS S3 connection successful!',
+      bucketName: bucketName,
+      region: process.env.AWS_REGION || 'us-east-1',
+      objectCount: result.KeyCount,
+      timestamp: new Date().toISOString(),
+      config: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID ? 'Set' : 'Missing',
+        secretKey: process.env.AWS_SECRET_ACCESS_KEY ? 'Set' : 'Missing',
+        region: process.env.AWS_REGION || 'us-east-1',
+        bucket: bucketName
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: 'AWS S3 connection failed!',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString(),
+      config: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID ? 'Set' : 'Missing',
+        secretKey: process.env.AWS_SECRET_ACCESS_KEY ? 'Set' : 'Missing',
+        region: process.env.AWS_REGION || 'us-east-1',
+        bucket: process.env.AWS_S3_BUCKET_NAME || 'sriexpress'
+      }
+    });
+  }
+});
+
 // WebSocket status endpoint
 app.get('/websocket-status', (req, res) => {
   try {
@@ -364,6 +413,9 @@ app.use('/api/routes', routeRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/tracking', trackingRoutes);
 app.use('/api/payments', paymentRoutes);
+
+// Vehicle Document routes (MUST be before fleet routes to avoid conflicts)
+app.use('/api/fleet/vehicles', vehicleDocumentRoutes);  // Vehicle document upload routes
 
 // Fleet Portal routes ← NEW
 app.use('/api/fleet', fleetRoutes);  // ← ADD THIS LINE
