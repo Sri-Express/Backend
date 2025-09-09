@@ -6,18 +6,16 @@ export interface IRouteAssignment extends Document {
   vehicleId: mongoose.Types.ObjectId;
   routeId: mongoose.Types.ObjectId;
   assignedAt: Date;
-  status: 'active' | 'inactive' | 'suspended';
+  status: 'pending' | 'approved' | 'rejected' | 'active' | 'inactive' | 'suspended';
   assignedBy: mongoose.Types.ObjectId;
+  approvedAt?: Date;
+  approvedBy?: mongoose.Types.ObjectId;
+  rejectedAt?: Date;
+  rejectedBy?: mongoose.Types.ObjectId;
+  rejectionReason?: string;
   unassignedAt?: Date;
   unassignedBy?: mongoose.Types.ObjectId;
   unassignReason?: string;
-  // Fixed: Changed from tuple to array type
-  schedules?: {
-    startTime: string;
-    endTime: string;
-    daysOfWeek: string[];
-    isActive: boolean;
-  }[];
   performance: {
     totalTrips: number;
     completedTrips: number;
@@ -27,6 +25,8 @@ export interface IRouteAssignment extends Document {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  approve(adminId: mongoose.Types.ObjectId): Promise<IRouteAssignment>;
+  reject(adminId: mongoose.Types.ObjectId, reason?: string): Promise<IRouteAssignment>;
   suspend(adminId: mongoose.Types.ObjectId, reason: string): Promise<IRouteAssignment>;
   reactivate(adminId: mongoose.Types.ObjectId): Promise<IRouteAssignment>;
   unassign(userId: mongoose.Types.ObjectId, reason?: string): Promise<IRouteAssignment>;
@@ -55,13 +55,30 @@ const RouteAssignmentSchema = new Schema<IRouteAssignment>(
     },
     status: {
       type: String,
-      enum: ['active', 'inactive', 'suspended'],
-      default: 'active'
+      enum: ['pending', 'approved', 'rejected', 'active', 'inactive', 'suspended'],
+      default: 'pending'
     },
     assignedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true
+    },
+    approvedAt: {
+      type: Date
+    },
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    rejectedAt: {
+      type: Date
+    },
+    rejectedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    rejectionReason: {
+      type: String
     },
     unassignedAt: {
       type: Date
@@ -73,26 +90,6 @@ const RouteAssignmentSchema = new Schema<IRouteAssignment>(
     unassignReason: {
       type: String
     },
-    // Fixed: Changed from tuple syntax to proper array schema
-    schedules: [{
-      startTime: { 
-        type: String,
-        required: true
-      },
-      endTime: { 
-        type: String,
-        required: true
-      },
-      daysOfWeek: {
-        type: [String],
-        enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
-        required: true
-      },
-      isActive: { 
-        type: Boolean, 
-        default: true 
-      }
-    }],
     performance: {
       totalTrips: {
         type: Number,
@@ -142,6 +139,26 @@ RouteAssignmentSchema.index(
 );
 
 // Methods
+RouteAssignmentSchema.methods.approve = async function(adminId: mongoose.Types.ObjectId) {
+  this.status = 'approved';
+  this.approvedAt = new Date();
+  this.approvedBy = adminId;
+  this.rejectedAt = undefined;
+  this.rejectedBy = undefined;
+  this.rejectionReason = undefined;
+  return await this.save();
+};
+
+RouteAssignmentSchema.methods.reject = async function(adminId: mongoose.Types.ObjectId, reason?: string) {
+  this.status = 'rejected';
+  this.rejectedAt = new Date();
+  this.rejectedBy = adminId;
+  this.rejectionReason = reason;
+  this.approvedAt = undefined;
+  this.approvedBy = undefined;
+  return await this.save();
+};
+
 RouteAssignmentSchema.methods.suspend = async function(adminId: mongoose.Types.ObjectId, reason: string) {
   this.status = 'suspended';
   this.unassignedBy = adminId;
@@ -151,7 +168,7 @@ RouteAssignmentSchema.methods.suspend = async function(adminId: mongoose.Types.O
 };
 
 RouteAssignmentSchema.methods.reactivate = async function(adminId: mongoose.Types.ObjectId) {
-  this.status = 'active';
+  this.status = 'approved'; // Changed from 'active' to 'approved'
   this.unassignedBy = undefined;
   this.unassignReason = undefined;
   this.updatedAt = new Date();
@@ -170,7 +187,7 @@ RouteAssignmentSchema.methods.unassign = async function(userId: mongoose.Types.O
 RouteAssignmentSchema.statics.getActiveAssignmentsByFleet = function(fleetId: mongoose.Types.ObjectId) {
   return this.find({ 
     fleetId, 
-    status: 'active', 
+    status: { $in: ['approved', 'active'] },
     isActive: true 
   })
   .populate('vehicleId', 'vehicleNumber vehicleType status')
@@ -181,22 +198,41 @@ RouteAssignmentSchema.statics.getActiveAssignmentsByFleet = function(fleetId: mo
 RouteAssignmentSchema.statics.getAssignmentsByRoute = function(routeId: mongoose.Types.ObjectId) {
   return this.find({ 
     routeId, 
-    status: 'active', 
+    status: { $in: ['pending', 'approved', 'active'] },
     isActive: true 
   })
   .populate('vehicleId', 'vehicleNumber vehicleType status')
-  .populate('fleetId', 'companyName phone') // Changed from contactNumber to phone
+  .populate('fleetId', 'companyName phone')
+  .populate('assignedBy', 'name email')
+  .populate('approvedBy', 'name email')
   .sort({ assignedAt: -1 });
 };
 
 RouteAssignmentSchema.statics.getVehicleAssignments = function(vehicleId: mongoose.Types.ObjectId) {
   return this.find({ 
     vehicleId, 
-    status: 'active', 
+    status: { $in: ['approved', 'active'] },
     isActive: true 
   })
   .populate('routeId', 'name routeId startLocation endLocation distance pricing')
   .sort({ assignedAt: -1 });
+};
+
+RouteAssignmentSchema.statics.getPendingAssignments = function(routeId?: mongoose.Types.ObjectId) {
+  const query: any = {
+    status: 'pending',
+    isActive: true
+  };
+  
+  if (routeId) {
+    query.routeId = routeId;
+  }
+
+  return this.find(query)
+    .populate('vehicleId', 'vehicleNumber vehicleType status')
+    .populate('fleetId', 'companyName phone')
+    .populate('assignedBy', 'name email')
+    .sort({ assignedAt: -1 });
 };
 
 const RouteAssignment = mongoose.model<IRouteAssignment>('RouteAssignment', RouteAssignmentSchema);

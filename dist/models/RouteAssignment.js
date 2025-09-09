@@ -57,13 +57,30 @@ const RouteAssignmentSchema = new mongoose_1.Schema({
     },
     status: {
         type: String,
-        enum: ['active', 'inactive', 'suspended'],
-        default: 'active'
+        enum: ['pending', 'approved', 'rejected', 'active', 'inactive', 'suspended'],
+        default: 'pending'
     },
     assignedBy: {
         type: mongoose_1.default.Schema.Types.ObjectId,
         ref: 'User',
         required: true
+    },
+    approvedAt: {
+        type: Date
+    },
+    approvedBy: {
+        type: mongoose_1.default.Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    rejectedAt: {
+        type: Date
+    },
+    rejectedBy: {
+        type: mongoose_1.default.Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    rejectionReason: {
+        type: String
     },
     unassignedAt: {
         type: Date
@@ -75,26 +92,6 @@ const RouteAssignmentSchema = new mongoose_1.Schema({
     unassignReason: {
         type: String
     },
-    // Fixed: Changed from tuple syntax to proper array schema
-    schedules: [{
-            startTime: {
-                type: String,
-                required: true
-            },
-            endTime: {
-                type: String,
-                required: true
-            },
-            daysOfWeek: {
-                type: [String],
-                enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
-                required: true
-            },
-            isActive: {
-                type: Boolean,
-                default: true
-            }
-        }],
     performance: {
         totalTrips: {
             type: Number,
@@ -136,6 +133,24 @@ RouteAssignmentSchema.index({ vehicleId: 1, routeId: 1, status: 1 }, {
     partialFilterExpression: { status: 'active' }
 });
 // Methods
+RouteAssignmentSchema.methods.approve = async function (adminId) {
+    this.status = 'approved';
+    this.approvedAt = new Date();
+    this.approvedBy = adminId;
+    this.rejectedAt = undefined;
+    this.rejectedBy = undefined;
+    this.rejectionReason = undefined;
+    return await this.save();
+};
+RouteAssignmentSchema.methods.reject = async function (adminId, reason) {
+    this.status = 'rejected';
+    this.rejectedAt = new Date();
+    this.rejectedBy = adminId;
+    this.rejectionReason = reason;
+    this.approvedAt = undefined;
+    this.approvedBy = undefined;
+    return await this.save();
+};
 RouteAssignmentSchema.methods.suspend = async function (adminId, reason) {
     this.status = 'suspended';
     this.unassignedBy = adminId;
@@ -144,7 +159,7 @@ RouteAssignmentSchema.methods.suspend = async function (adminId, reason) {
     return await this.save();
 };
 RouteAssignmentSchema.methods.reactivate = async function (adminId) {
-    this.status = 'active';
+    this.status = 'approved'; // Changed from 'active' to 'approved'
     this.unassignedBy = undefined;
     this.unassignReason = undefined;
     this.updatedAt = new Date();
@@ -162,7 +177,7 @@ RouteAssignmentSchema.methods.unassign = async function (userId, reason) {
 RouteAssignmentSchema.statics.getActiveAssignmentsByFleet = function (fleetId) {
     return this.find({
         fleetId,
-        status: 'active',
+        status: { $in: ['approved', 'active'] },
         isActive: true
     })
         .populate('vehicleId', 'vehicleNumber vehicleType status')
@@ -172,20 +187,36 @@ RouteAssignmentSchema.statics.getActiveAssignmentsByFleet = function (fleetId) {
 RouteAssignmentSchema.statics.getAssignmentsByRoute = function (routeId) {
     return this.find({
         routeId,
-        status: 'active',
+        status: { $in: ['pending', 'approved', 'active'] },
         isActive: true
     })
         .populate('vehicleId', 'vehicleNumber vehicleType status')
-        .populate('fleetId', 'companyName phone') // Changed from contactNumber to phone
+        .populate('fleetId', 'companyName phone')
+        .populate('assignedBy', 'name email')
+        .populate('approvedBy', 'name email')
         .sort({ assignedAt: -1 });
 };
 RouteAssignmentSchema.statics.getVehicleAssignments = function (vehicleId) {
     return this.find({
         vehicleId,
-        status: 'active',
+        status: { $in: ['approved', 'active'] },
         isActive: true
     })
         .populate('routeId', 'name routeId startLocation endLocation distance pricing')
+        .sort({ assignedAt: -1 });
+};
+RouteAssignmentSchema.statics.getPendingAssignments = function (routeId) {
+    const query = {
+        status: 'pending',
+        isActive: true
+    };
+    if (routeId) {
+        query.routeId = routeId;
+    }
+    return this.find(query)
+        .populate('vehicleId', 'vehicleNumber vehicleType status')
+        .populate('fleetId', 'companyName phone')
+        .populate('assignedBy', 'name email')
         .sort({ assignedAt: -1 });
 };
 const RouteAssignment = mongoose_1.default.model('RouteAssignment', RouteAssignmentSchema);
