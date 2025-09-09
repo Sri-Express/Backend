@@ -46,7 +46,7 @@ router.get('/route-assignments/stats', fleetRouteController_1.getFleetRouteStats
 router.post('/route-assignments', fleetRouteController_1.assignVehiclesToRoute);
 // Individual assignment management
 router.delete('/route-assignments/:routeId/:vehicleId', fleetRouteController_1.unassignVehicleFromRoute);
-router.put('/route-assignments/:assignmentId/schedules', fleetRouteController_1.updateAssignmentSchedules);
+router.put('/route-assignments/:assignmentId/status', fleetRouteController_1.updateAssignmentStatus);
 router.get('/route-assignments/:assignmentId/performance', fleetRouteController_1.getAssignmentPerformance);
 // ============================
 // FLEET OPERATIONS (Placeholder endpoints)

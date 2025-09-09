@@ -232,7 +232,7 @@ export const getRouteAssignments = async (req: Request, res: Response): Promise<
 // @access  Private (Fleet Manager)
 export const assignVehiclesToRoute = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { routeId, vehicleIds, schedules } = req.body;
+    const { routeId, vehicleIds } = req.body;
     // Find fleet by user email
     const fleet = await Fleet.findOne({ 
       email: req.user?.email,
@@ -333,13 +333,7 @@ export const assignVehiclesToRoute = async (req: Request, res: Response): Promis
         vehicleId,
         routeId,
         assignedBy: userId,
-        schedules: schedules || [{
-          startTime: "06:00",
-          endTime: "22:00",
-          daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
-          isActive: true
-        }],
-        status: 'active',
+        status: 'pending', // New assignments start as pending and need route admin approval
         isActive: true
       };
 
@@ -439,13 +433,14 @@ export const unassignVehicleFromRoute = async (req: Request, res: Response): Pro
   }
 };
 
-// @desc    Update route assignment schedules
-// @route   PUT /api/fleet/route-assignments/:assignmentId/schedules
-// @access  Private (Fleet Manager)
-export const updateAssignmentSchedules = async (req: Request, res: Response): Promise<void> => {
+// @desc    Update route assignment status (for approval workflow)
+// @route   PUT /api/fleet/route-assignments/:assignmentId/status
+// @access  Private (Fleet Manager - only for own assignments)
+export const updateAssignmentStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const { assignmentId } = req.params;
-    const { schedules } = req.body;
+    const { status } = req.body;
+    
     // Find fleet by user email
     const fleet = await Fleet.findOne({ 
       email: req.user?.email,
@@ -465,9 +460,9 @@ export const updateAssignmentSchedules = async (req: Request, res: Response): Pr
       return;
     }
 
-    // Validate schedules
-    if (!schedules || !Array.isArray(schedules) || schedules.length === 0) {
-      res.status(400).json({ message: 'Valid schedules array is required' });
+    // Validate status
+    if (!status || !['active', 'inactive'].includes(status)) {
+      res.status(400).json({ message: 'Valid status is required (active or inactive)' });
       return;
     }
 
@@ -475,7 +470,6 @@ export const updateAssignmentSchedules = async (req: Request, res: Response): Pr
     const assignment = await RouteAssignment.findOne({
       _id: assignmentId,
       fleetId,
-      status: 'active',
       isActive: true
     });
 
@@ -484,8 +478,8 @@ export const updateAssignmentSchedules = async (req: Request, res: Response): Pr
       return;
     }
 
-    // Update schedules - ensure proper type casting
-    assignment.schedules = schedules as any;
+    // Update status
+    assignment.status = status as any;
     assignment.updatedAt = new Date();
     await assignment.save();
 
@@ -495,11 +489,11 @@ export const updateAssignmentSchedules = async (req: Request, res: Response): Pr
       .populate('routeId', 'name routeId');
 
     res.json({
-      message: 'Assignment schedules updated successfully',
+      message: 'Assignment status updated successfully',
       assignment: updatedAssignment
     });
   } catch (error) {
-    console.error('Update assignment schedules error:', error);
+    console.error('Update assignment status error:', error);
     res.status(500).json({ 
       message: 'Server error', 
       error: error instanceof Error ? error.message : 'Unknown error' 

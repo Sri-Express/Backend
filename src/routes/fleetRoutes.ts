@@ -26,7 +26,7 @@ import {
   getRouteAssignments,
   assignVehiclesToRoute,
   unassignVehicleFromRoute,
-  updateAssignmentSchedules,
+  updateAssignmentStatus,
   getAssignmentPerformance,
   getFleetRouteStats
 } from '../controllers/fleetRouteController';
@@ -73,7 +73,7 @@ router.post('/route-assignments', assignVehiclesToRoute);
 
 // Individual assignment management
 router.delete('/route-assignments/:routeId/:vehicleId', unassignVehicleFromRoute);
-router.put('/route-assignments/:assignmentId/schedules', updateAssignmentSchedules);
+router.put('/route-assignments/:assignmentId/status', updateAssignmentStatus);
 router.get('/route-assignments/:assignmentId/performance', getAssignmentPerformance);
 
 // ============================

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getFleetRouteStats = exports.getAssignmentPerformance = exports.updateAssignmentSchedules = exports.unassignVehicleFromRoute = exports.assignVehiclesToRoute = exports.getRouteAssignments = exports.getApprovedVehicles = exports.getAvailableRoutes = void 0;
+exports.getFleetRouteStats = exports.getAssignmentPerformance = exports.updateAssignmentStatus = exports.unassignVehicleFromRoute = exports.assignVehiclesToRoute = exports.getRouteAssignments = exports.getApprovedVehicles = exports.getAvailableRoutes = void 0;
 const Route_1 = __importDefault(require("../models/Route"));
 const Device_1 = __importDefault(require("../models/Device"));
 const RouteAssignment_1 = __importDefault(require("../models/RouteAssignment"));
@@ -209,7 +209,7 @@ exports.getRouteAssignments = getRouteAssignments;
 const assignVehiclesToRoute = async (req, res) => {
     var _a, _b;
     try {
-        const { routeId, vehicleIds, schedules } = req.body;
+        const { routeId, vehicleIds } = req.body;
         // Find fleet by user email
         const fleet = await Fleet_1.default.findOne({
             email: (_a = req.user) === null || _a === void 0 ? void 0 : _a.email,
@@ -294,13 +294,7 @@ const assignVehiclesToRoute = async (req, res) => {
                 vehicleId,
                 routeId,
                 assignedBy: userId,
-                schedules: schedules || [{
-                        startTime: "06:00",
-                        endTime: "22:00",
-                        daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
-                        isActive: true
-                    }],
-                status: 'active',
+                status: 'pending', // New assignments start as pending and need route admin approval
                 isActive: true
             };
             return new RouteAssignment_1.default(assignmentData).save();
@@ -391,14 +385,14 @@ const unassignVehicleFromRoute = async (req, res) => {
     }
 };
 exports.unassignVehicleFromRoute = unassignVehicleFromRoute;
-// @desc    Update route assignment schedules
-// @route   PUT /api/fleet/route-assignments/:assignmentId/schedules
-// @access  Private (Fleet Manager)
-const updateAssignmentSchedules = async (req, res) => {
+// @desc    Update route assignment status (for approval workflow)
+// @route   PUT /api/fleet/route-assignments/:assignmentId/status
+// @access  Private (Fleet Manager - only for own assignments)
+const updateAssignmentStatus = async (req, res) => {
     var _a;
     try {
         const { assignmentId } = req.params;
-        const { schedules } = req.body;
+        const { status } = req.body;
         // Find fleet by user email
         const fleet = await Fleet_1.default.findOne({
             email: (_a = req.user) === null || _a === void 0 ? void 0 : _a.email,
@@ -414,24 +408,23 @@ const updateAssignmentSchedules = async (req, res) => {
             res.status(400).json({ message: 'Invalid assignment ID' });
             return;
         }
-        // Validate schedules
-        if (!schedules || !Array.isArray(schedules) || schedules.length === 0) {
-            res.status(400).json({ message: 'Valid schedules array is required' });
+        // Validate status
+        if (!status || !['active', 'inactive'].includes(status)) {
+            res.status(400).json({ message: 'Valid status is required (active or inactive)' });
             return;
         }
         // Find the assignment
         const assignment = await RouteAssignment_1.default.findOne({
             _id: assignmentId,
             fleetId,
-            status: 'active',
             isActive: true
         });
         if (!assignment) {
             res.status(404).json({ message: 'Assignment not found or not accessible' });
             return;
         }
-        // Update schedules - ensure proper type casting
-        assignment.schedules = schedules;
+        // Update status
+        assignment.status = status;
         assignment.updatedAt = new Date();
         await assignment.save();
         // Populate and return updated assignment
@@ -439,19 +432,19 @@ const updateAssignmentSchedules = async (req, res) => {
             .populate('vehicleId', 'vehicleNumber vehicleType')
             .populate('routeId', 'name routeId');
         res.json({
-            message: 'Assignment schedules updated successfully',
+            message: 'Assignment status updated successfully',
             assignment: updatedAssignment
         });
     }
     catch (error) {
-        console.error('Update assignment schedules error:', error);
+        console.error('Update assignment status error:', error);
         res.status(500).json({
             message: 'Server error',
             error: error instanceof Error ? error.message : 'Unknown error'
         });
     }
 };
-exports.updateAssignmentSchedules = updateAssignmentSchedules;
+exports.updateAssignmentStatus = updateAssignmentStatus;
 // @desc    Get assignment performance statistics
 // @route   GET /api/fleet/route-assignments/:assignmentId/performance
 // @access  Private (Fleet Manager)
