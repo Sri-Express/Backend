@@ -28,6 +28,8 @@ import './models/Ticket';          // ⭐ NEW - Customer Service Models
 import './models/Chat';            // ⭐ NEW - Customer Service Models
 import './models/KnowledgeBase';   // ⭐ NEW - Customer Service Models
 import './models/WeatherChat';     // ⭐ ADD THIS LINE
+import './models/RouteSlot';       // ⭐ NEW - Slot-based scheduling
+import './models/SlotAssignment';  // ⭐ NEW - Slot-based scheduling
 
 // Import ALL routes
 import authRoutes from './routes/authRoutes';
@@ -42,6 +44,7 @@ import fleetRoutes from './routes/fleetRoutes';  // ← ADD THIS LINE
 import csRoutes from './routes/csRoutes';  // ⭐ NEW - Customer Service Routes
 import weatherRoutes from './routes/weatherRoutes';  // ⭐ ADD THIS LINE
 import routeAdminRoutes from './routes/routeAdminRoutes';
+import slotRoutes from './routes/slotRoutes';  // ⭐ NEW - Slot-based scheduling
 
 
 // Import middleware
@@ -373,6 +376,7 @@ app.use('/api/weather', weatherRoutes);
 
 // Route admin routes
 app.use('/api/route-admin', routeAdminRoutes);
+app.use('/api/slots', slotRoutes);  // ⭐ NEW - Slot-based scheduling
 
 // Error handling middleware
 app.use(notFound);

@@ -31,6 +31,8 @@ require("./models/Ticket"); // ⭐ NEW - Customer Service Models
 require("./models/Chat"); // ⭐ NEW - Customer Service Models
 require("./models/KnowledgeBase"); // ⭐ NEW - Customer Service Models
 require("./models/WeatherChat"); // ⭐ ADD THIS LINE
+require("./models/RouteSlot"); // ⭐ NEW - Slot-based scheduling
+require("./models/SlotAssignment"); // ⭐ NEW - Slot-based scheduling
 // Import ALL routes
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const dashboardRoutes_1 = __importDefault(require("./routes/dashboardRoutes"));
@@ -44,6 +46,7 @@ const fleetRoutes_1 = __importDefault(require("./routes/fleetRoutes")); // ← A
 const csRoutes_1 = __importDefault(require("./routes/csRoutes")); // ⭐ NEW - Customer Service Routes
 const weatherRoutes_1 = __importDefault(require("./routes/weatherRoutes")); // ⭐ ADD THIS LINE
 const routeAdminRoutes_1 = __importDefault(require("./routes/routeAdminRoutes"));
+const slotRoutes_1 = __importDefault(require("./routes/slotRoutes")); // ⭐ NEW - Slot-based scheduling
 // Import middleware
 const errorMiddleware_1 = require("./middleware/errorMiddleware");
 // Import DB connection
@@ -346,6 +349,7 @@ app.use('/api/cs', csRoutes_1.default);
 app.use('/api/weather', weatherRoutes_1.default);
 // Route admin routes
 app.use('/api/route-admin', routeAdminRoutes_1.default);
+app.use('/api/slots', slotRoutes_1.default); // ⭐ NEW - Slot-based scheduling
 // Error handling middleware
 app.use(errorMiddleware_1.notFound);
 app.use(errorMiddleware_1.errorHandler);
