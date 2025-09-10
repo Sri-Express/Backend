@@ -38,7 +38,7 @@ import adminRoutes from './routes/adminRoutes';
 import routeRoutes from './routes/routeRoutes';
 import bookingRoutes from './routes/bookingRoutes';
 import trackingRoutes from './routes/trackingRoutes';
-import paymentRoutes from './routes/paymentRoutes';
+import paymentRoutes from './routes/paymentRoutes'; // PayHere integration routes
 import paymentSimulationRoutes from './routes/paymentSimulationRoutes';
 import fleetRoutes from './routes/fleetRoutes';  // ← ADD THIS LINE
 import csRoutes from './routes/csRoutes';  // ⭐ NEW - Customer Service Routes

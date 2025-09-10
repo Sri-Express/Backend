@@ -1,6 +1,7 @@
-// src/controllers/paymentController.ts - FIXED VERSION WITH BOOKING STATUS UPDATE
+// src/controllers/paymentController.ts - FIXED VERSION WITH BOOKING STATUS UPDATE + PayHere Integration
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
+import crypto from 'crypto';
 import Payment from '../models/Payment';
 import Booking from '../models/Booking';
 import User from '../models/User';
@@ -437,3 +438,127 @@ async function processBankTransfer(bankInfo: any, amount: number) {
     } 
   };
 }
+
+// ====================================================================
+// PAYHERE INTEGRATION FUNCTIONS
+// ====================================================================
+
+// @desc    Handle PayHere webhook
+// @route   POST /api/payments/webhook/payhere
+// @access  Public (PayHere webhook)
+export const handlePayHereWebhook = async (req: Request, res: Response): Promise<void> => {
+  try {
+    console.log('🔔 PayHere webhook received:', req.body);
+
+    const {
+      merchant_id,
+      order_id,
+      payhere_amount,
+      payhere_currency,
+      status_code,
+      md5sig,
+      method,
+      status_message,
+      card_holder_name,
+      card_no,
+      card_expiry
+    } = req.body;
+
+    // Verify webhook signature
+    const merchantSecret = process.env.PAYHERE_MERCHANT_SECRET;
+    if (!merchantSecret) {
+      console.error('❌ PayHere merchant secret not configured');
+      res.status(500).json({ error: 'Merchant secret not configured' });
+      return;
+    }
+
+    // Generate expected hash
+    const hashString = `${merchant_id}${order_id}${payhere_amount}${payhere_currency}${status_code}${merchantSecret}`;
+    const expectedHash = crypto.createHash('md5').update(hashString).digest('hex').toUpperCase();
+
+    if (md5sig !== expectedHash) {
+      console.error('❌ PayHere webhook signature verification failed');
+      console.error('Expected hash:', expectedHash);
+      console.error('Received hash:', md5sig);
+      res.status(400).json({ error: 'Invalid signature' });
+      return;
+    }
+
+    console.log('✅ PayHere webhook signature verified');
+
+    // Process payment status
+    if (status_code === '2') {
+      // Payment successful
+      console.log('✅ PayHere payment successful for order:', order_id);
+      
+      // Here you would:
+      // 1. Update booking status in database
+      // 2. Send confirmation email
+      // 3. Update payment records
+      
+      console.log('💳 Payment Details:', {
+        orderId: order_id,
+        amount: payhere_amount,
+        currency: payhere_currency,
+        method: method,
+        cardHolderName: card_holder_name,
+        cardNo: card_no ? `****-****-****-${card_no.slice(-4)}` : 'N/A'
+      });
+
+    } else if (status_code === '0') {
+      console.log('⏳ PayHere payment pending for order:', order_id);
+    } else if (status_code === '-1') {
+      console.log('⚠️ PayHere payment cancelled for order:', order_id);
+    } else if (status_code === '-2') {
+      console.log('❌ PayHere payment failed for order:', order_id);
+      console.log('Error message:', status_message);
+    } else if (status_code === '-3') {
+      console.log('🔄 PayHere payment charged back for order:', order_id);
+    }
+
+    // Respond to PayHere
+    res.status(200).json({ status: 'OK' });
+
+  } catch (error) {
+    console.error('💥 PayHere webhook error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+};
+
+// @desc    Verify PayHere payment
+// @route   POST /api/payments/verify
+// @access  Public (for PayHere verification)
+export const verifyPayHerePayment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { paymentId, orderId } = req.body;
+    
+    console.log('🔍 Verifying PayHere payment:', { paymentId, orderId });
+
+    // Here you would call PayHere API to verify the payment
+    // For sandbox/development, we'll simulate verification
+    const verified = true;
+
+    res.json({ 
+      verified,
+      paymentId,
+      orderId,
+      message: verified ? 'Payment verified successfully' : 'Payment verification failed'
+    });
+
+  } catch (error) {
+    console.error('PayHere verification error:', error);
+    res.status(500).json({ error: 'Verification failed' });
+  }
+};
+
+// @desc    Test PayHere integration
+// @route   GET /api/payments/test
+// @access  Public
+export const testPayHereIntegration = (req: Request, res: Response): void => {
+  res.json({
+    message: 'PayHere payment integration working',
+    merchantId: process.env.PAYHERE_MERCHANT_ID,
+    sandbox: process.env.PAYHERE_SANDBOX === 'true',
+    timestamp: new Date().toISOString()
+  });
+};

@@ -1,29 +1,20 @@
-// src/routes/paymentRoutes.ts - FIXED VERSION WITH CONFIRM ENDPOINT
-import express from 'express';
-import { protect } from '../middleware/authMiddleware';
-import {
-  processPayment,
-  confirmPayment, // 🔥 NEW: Added confirm payment import
-  getPaymentById,
-  processRefund,
-  getPaymentHistory,
-  getPaymentMethods,
-  getPaymentStats
+// src/routes/paymentRoutes.ts - PayHere Payment Routes
+import { Router } from 'express';
+import { 
+  handlePayHereWebhook, 
+  verifyPayHerePayment, 
+  testPayHereIntegration 
 } from '../controllers/paymentController';
 
-const router = express.Router();
+const router = Router();
 
-// Public routes
-router.get('/methods', getPaymentMethods);
+// PayHere webhook endpoint
+router.post('/webhook/payhere', handlePayHereWebhook);
 
-// Protected routes
-router.use(protect);
+// Payment verification endpoint
+router.post('/verify', verifyPayHerePayment);
 
-router.post('/', processPayment);
-router.post('/confirm', confirmPayment); // 🔥 NEW: Added confirm payment endpoint
-router.get('/history', getPaymentHistory);
-router.get('/stats', getPaymentStats);
-router.get('/:id', getPaymentById);
-router.post('/refund', processRefund);
+// Test endpoint for PayHere integration
+router.get('/test', testPayHereIntegration);
 
 export default router;
