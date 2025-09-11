@@ -4,6 +4,7 @@
 import { Request, Response } from 'express';
 import WeatherChat from '../models/WeatherChat';
 import User from '../models/User';
+import backendWeatherService from '../services/weatherService';
 
 interface WeatherRequest extends Request {
   user?: any;
@@ -134,12 +135,12 @@ export const getCurrentWeather = async (req: Request, res: Response): Promise<vo
 
     console.log(`🌤️ Fetching current weather for ${location}`);
 
-    // Generate weather data for the requested location
-    const weatherData = generateCityWeatherData(location);
+    // Use real weather service
+    const weatherData = await backendWeatherService.getCurrentWeather(location);
 
     res.json({
       success: true,
-      data: weatherData.current,
+      data: weatherData,
       location,
       timestamp: new Date(),
     });
@@ -166,8 +167,8 @@ export const getComprehensiveWeather = async (req: Request, res: Response): Prom
 
     console.log(`🌤️ Fetching comprehensive weather for ${location}`);
 
-    // Generate comprehensive weather data
-    const weatherData = generateCityWeatherData(location);
+    // Use real weather service
+    const weatherData = await backendWeatherService.getComprehensiveWeather(location);
 
     res.json({
       success: true,
@@ -180,7 +181,7 @@ export const getComprehensiveWeather = async (req: Request, res: Response): Prom
     res.status(500).json({ 
       message: 'Server error fetching comprehensive weather data',
       error: error instanceof Error ? error.message : 'Unknown error' 
-    });
+    });  
   }
 };
 
@@ -200,10 +201,18 @@ export const getMultipleLocationWeather = async (req: Request, res: Response): P
 
     const weatherData: { [key: string]: any } = {};
 
-    for (const location of locations) {
-      const data = generateCityWeatherData(location);
-      weatherData[location] = data.current;
-    }
+    // Fetch real weather data for each location
+    const promises = locations.map(async (location: string) => {
+      try {
+        const data = await backendWeatherService.getCurrentWeather(location);
+        weatherData[location] = data;
+      } catch (error) {
+        console.error(`Error fetching weather for ${location}:`, error);
+        weatherData[location] = null;
+      }
+    });
+
+    await Promise.all(promises);
 
     res.json({
       success: true,
@@ -234,23 +243,25 @@ export const getRouteWeather = async (req: Request, res: Response): Promise<void
 
     console.log(`🌤️ Fetching route weather: ${from} → ${to}`);
 
-    // Get weather data for both locations
-    const fromWeather = generateCityWeatherData(from);
-    const toWeather = generateCityWeatherData(to);
+    // Get real weather data for both locations
+    const [fromWeather, toWeather] = await Promise.all([
+      backendWeatherService.getCurrentWeather(from),
+      backendWeatherService.getCurrentWeather(to)
+    ]);
 
     // Calculate route conditions
     const routeAnalysis = {
-      from: fromWeather.current,
-      to: toWeather.current,
+      from: fromWeather,
+      to: toWeather,
       routeConditions: {
         overall: 'good' as const,
-        averageTemp: Math.round((fromWeather.current.temperature + toWeather.current.temperature) / 2),
-        averageHumidity: Math.round((fromWeather.current.humidity + toWeather.current.humidity) / 2),
-        maxWindSpeed: Math.max(fromWeather.current.windSpeed, toWeather.current.windSpeed),
-        minVisibility: Math.min(fromWeather.current.visibility, toWeather.current.visibility),
+        averageTemp: Math.round((fromWeather.temperature + toWeather.temperature) / 2),
+        averageHumidity: Math.round((fromWeather.humidity + toWeather.humidity) / 2),
+        maxWindSpeed: Math.max(fromWeather.windSpeed, toWeather.windSpeed),
+        minVisibility: Math.min(fromWeather.visibility, toWeather.visibility),
         recommendations: [
-          `Departure: ${fromWeather.current.temperature}°C in ${from}`,
-          `Arrival: ${toWeather.current.temperature}°C in ${to}`,
+          `Departure: ${fromWeather.temperature}°C in ${from}`,
+          `Arrival: ${toWeather.temperature}°C in ${to}`,
           'Normal travel conditions expected',
         ],
         estimatedTravelTime: '3-4 hours', // Mock data
