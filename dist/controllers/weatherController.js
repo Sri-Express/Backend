@@ -8,6 +8,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getWeatherStats = exports.getWeatherAlerts = exports.getAvailableLocations = exports.updateWeatherPreferences = exports.getWeatherPreferences = exports.saveChatMessage = exports.getChatHistory = exports.getRouteWeather = exports.getMultipleLocationWeather = exports.getComprehensiveWeather = exports.getCurrentWeather = void 0;
 const WeatherChat_1 = __importDefault(require("../models/WeatherChat"));
 const User_1 = __importDefault(require("../models/User"));
+const weatherService_1 = __importDefault(require("../services/weatherService"));
 // Mock weather data for development (replace with real API calls)
 const mockWeatherData = {
     colombo: {
@@ -125,11 +126,11 @@ const getCurrentWeather = async (req, res) => {
             return;
         }
         console.log(`🌤️ Fetching current weather for ${location}`);
-        // Generate weather data for the requested location
-        const weatherData = generateCityWeatherData(location);
+        // Use real weather service
+        const weatherData = await weatherService_1.default.getCurrentWeather(location);
         res.json({
             success: true,
-            data: weatherData.current,
+            data: weatherData,
             location,
             timestamp: new Date(),
         });
@@ -154,8 +155,8 @@ const getComprehensiveWeather = async (req, res) => {
             return;
         }
         console.log(`🌤️ Fetching comprehensive weather for ${location}`);
-        // Generate comprehensive weather data
-        const weatherData = generateCityWeatherData(location);
+        // Use real weather service
+        const weatherData = await weatherService_1.default.getComprehensiveWeather(location);
         res.json({
             success: true,
             data: weatherData,
@@ -184,10 +185,18 @@ const getMultipleLocationWeather = async (req, res) => {
         }
         console.log(`🌤️ Fetching weather for multiple locations: ${locations.join(', ')}`);
         const weatherData = {};
-        for (const location of locations) {
-            const data = generateCityWeatherData(location);
-            weatherData[location] = data.current;
-        }
+        // Fetch real weather data for each location
+        const promises = locations.map(async (location) => {
+            try {
+                const data = await weatherService_1.default.getCurrentWeather(location);
+                weatherData[location] = data;
+            }
+            catch (error) {
+                console.error(`Error fetching weather for ${location}:`, error);
+                weatherData[location] = null;
+            }
+        });
+        await Promise.all(promises);
         res.json({
             success: true,
             data: weatherData,
@@ -215,22 +224,24 @@ const getRouteWeather = async (req, res) => {
             return;
         }
         console.log(`🌤️ Fetching route weather: ${from} → ${to}`);
-        // Get weather data for both locations
-        const fromWeather = generateCityWeatherData(from);
-        const toWeather = generateCityWeatherData(to);
+        // Get real weather data for both locations
+        const [fromWeather, toWeather] = await Promise.all([
+            weatherService_1.default.getCurrentWeather(from),
+            weatherService_1.default.getCurrentWeather(to)
+        ]);
         // Calculate route conditions
         const routeAnalysis = {
-            from: fromWeather.current,
-            to: toWeather.current,
+            from: fromWeather,
+            to: toWeather,
             routeConditions: {
                 overall: 'good',
-                averageTemp: Math.round((fromWeather.current.temperature + toWeather.current.temperature) / 2),
-                averageHumidity: Math.round((fromWeather.current.humidity + toWeather.current.humidity) / 2),
-                maxWindSpeed: Math.max(fromWeather.current.windSpeed, toWeather.current.windSpeed),
-                minVisibility: Math.min(fromWeather.current.visibility, toWeather.current.visibility),
+                averageTemp: Math.round((fromWeather.temperature + toWeather.temperature) / 2),
+                averageHumidity: Math.round((fromWeather.humidity + toWeather.humidity) / 2),
+                maxWindSpeed: Math.max(fromWeather.windSpeed, toWeather.windSpeed),
+                minVisibility: Math.min(fromWeather.visibility, toWeather.visibility),
                 recommendations: [
-                    `Departure: ${fromWeather.current.temperature}°C in ${from}`,
-                    `Arrival: ${toWeather.current.temperature}°C in ${to}`,
+                    `Departure: ${fromWeather.temperature}°C in ${from}`,
+                    `Arrival: ${toWeather.temperature}°C in ${to}`,
                     'Normal travel conditions expected',
                 ],
                 estimatedTravelTime: '3-4 hours', // Mock data

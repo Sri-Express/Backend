@@ -14,6 +14,7 @@ router.use(authMiddleware_1.protect);
 router.get('/', bookingController_1.getUserBookings);
 router.post('/', bookingController_1.createBooking);
 router.get('/stats', bookingController_1.getBookingStats);
+router.get('/seat-availability', bookingController_1.getSeatAvailability);
 // Specific booking routes
 router.get('/:id', bookingController_1.getBookingById);
 router.put('/:id', bookingController_1.updateBooking);

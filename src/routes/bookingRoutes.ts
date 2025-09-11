@@ -10,7 +10,8 @@ import {
   generateQRCode,
   sendTicketByEmail,
   checkInPassenger,
-  getBookingStats
+  getBookingStats,
+  getSeatAvailability
 } from '../controllers/bookingController';
 
 const router = express.Router();
@@ -22,6 +23,7 @@ router.use(protect);
 router.get('/', getUserBookings);
 router.post('/', createBooking);
 router.get('/stats', getBookingStats);
+router.get('/seat-availability', getSeatAvailability);
 
 // Specific booking routes
 router.get('/:id', getBookingById);

@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getBookingStats = exports.checkInPassenger = exports.sendTicketByEmail = exports.generateQRCode = exports.cancelBooking = exports.updateBooking = exports.getBookingById = exports.createBooking = exports.getUserBookings = void 0;
+exports.getBookingStats = exports.getSeatAvailability = exports.checkInPassenger = exports.sendTicketByEmail = exports.generateQRCode = exports.cancelBooking = exports.updateBooking = exports.getBookingById = exports.createBooking = exports.getUserBookings = void 0;
 const mongoose_1 = require("mongoose");
 const Booking_1 = __importDefault(require("../models/Booking"));
 const Route_1 = __importDefault(require("../models/Route"));
@@ -154,7 +154,7 @@ exports.getUserBookings = getUserBookings;
 // @route   POST /api/bookings
 // @access  Private
 const createBooking = async (req, res) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
     try {
         console.log('=== BOOKING CREATION START ===');
         console.log('Timestamp:', new Date().toISOString());
@@ -175,7 +175,7 @@ const createBooking = async (req, res) => {
             'user-agent': req.headers['user-agent'],
             'origin': req.headers.origin
         });
-        const { routeId, scheduleId, travelDate, departureTime, passengerInfo, seatInfo, paymentMethod, status, paymentInfo } = req.body;
+        const { routeId, scheduleId, travelDate, departureTime, seatQuantity = 1, passengerInfo, seatInfo, paymentMethod, status, paymentInfo } = req.body;
         console.log('Extracted booking data:', {
             routeId: routeId || 'MISSING',
             scheduleId: scheduleId || 'MISSING',
@@ -322,31 +322,34 @@ const createBooking = async (req, res) => {
             generated: finalSeatNumber,
             seatType: seatInfo.seatType
         });
-        // Check seat availability with debugging
+        // Check if enough seats are available for the requested quantity
         console.log('Checking seat availability for:', {
             routeId: routeId,
             travelDate: bookingDate.toISOString(),
             departureTime: departureTime,
-            seatNumber: finalSeatNumber
+            requestedQuantity: seatQuantity
         });
-        const existingBooking = await Booking_1.default.findOne({
+        const bookedSeatsCount = await Booking_1.default.countDocuments({
             routeId,
             travelDate: bookingDate,
             departureTime,
-            'seatInfo.seatNumber': finalSeatNumber,
             status: { $in: ['confirmed', 'pending'] },
             isActive: true
         });
-        if (existingBooking) {
-            console.error('Seat already booked:', {
-                seatNumber: finalSeatNumber,
-                existingBookingId: existingBooking.bookingId,
-                existingUserId: existingBooking.userId.toString()
+        const availableSeats = route.vehicleInfo.capacity - bookedSeatsCount;
+        if (availableSeats < seatQuantity) {
+            console.error('Not enough seats available:', {
+                requestedQuantity: seatQuantity,
+                availableSeats: availableSeats,
+                totalCapacity: route.vehicleInfo.capacity,
+                bookedSeats: bookedSeatsCount
             });
-            res.status(400).json({ message: 'Seat already booked for this schedule' });
+            res.status(400).json({
+                message: `Only ${availableSeats} seats available for this schedule. You requested ${seatQuantity} seats.`
+            });
             return;
         }
-        console.log('Seat available:', finalSeatNumber);
+        console.log('Enough seats available:', { requestedQuantity: seatQuantity, availableSeats });
         // Calculate pricing with debugging
         let basePrice;
         const passengerType = passengerInfo.passengerType || 'regular';
@@ -391,63 +394,63 @@ const createBooking = async (req, res) => {
             totalAmount,
             passengerType
         });
-        // Create booking data with debugging
-        const bookingData = {
-            userId: req.user._id,
-            routeId,
-            scheduleId,
-            travelDate: bookingDate,
-            departureTime,
-            passengerInfo: {
-                name: (_g = passengerInfo.name) === null || _g === void 0 ? void 0 : _g.trim(),
-                phone: (_h = passengerInfo.phone) === null || _h === void 0 ? void 0 : _h.trim(),
-                email: ((_j = passengerInfo.email) === null || _j === void 0 ? void 0 : _j.trim()) || req.user.email,
-                idType: passengerInfo.idType || 'nic',
-                idNumber: (_k = passengerInfo.idNumber) === null || _k === void 0 ? void 0 : _k.trim(),
-                passengerType: passengerType
-            },
-            seatInfo: {
-                seatNumber: finalSeatNumber,
-                seatType: seatInfo.seatType || 'window',
-                preferences: seatInfo.preferences || []
-            },
-            pricing: {
-                basePrice,
-                taxes,
-                discounts,
-                totalAmount,
-                currency: 'LKR'
-            },
-            paymentInfo: {
-                method: paymentMethod,
-                status: (paymentInfo === null || paymentInfo === void 0 ? void 0 : paymentInfo.status) || (status === 'confirmed' ? 'completed' : 'pending'),
-                ...((paymentInfo === null || paymentInfo === void 0 ? void 0 : paymentInfo.paymentId) && { paymentId: paymentInfo.paymentId }),
-                ...((paymentInfo === null || paymentInfo === void 0 ? void 0 : paymentInfo.transactionId) && { transactionId: paymentInfo.transactionId }),
-                ...((paymentInfo === null || paymentInfo === void 0 ? void 0 : paymentInfo.paidAt) && { paidAt: new Date(paymentInfo.paidAt) })
-            },
-            status: status || 'pending'
-        };
-        console.log('Final booking data structure:', {
-            userId: bookingData.userId.toString(),
-            routeId: bookingData.routeId.toString(),
-            scheduleId: bookingData.scheduleId,
-            passengerName: bookingData.passengerInfo.name,
-            seatNumber: bookingData.seatInfo.seatNumber,
-            totalAmount: bookingData.pricing.totalAmount,
-            status: bookingData.status,
-            paymentStatus: bookingData.paymentInfo.status
-        });
-        // Create and save booking
-        console.log('Creating booking document...');
-        const booking = new Booking_1.default(bookingData);
+        // Create multiple bookings based on seatQuantity
+        const bookings = [];
+        const createdBookings = [];
+        console.log(`Creating ${seatQuantity} booking(s)...`);
+        for (let i = 0; i < seatQuantity; i++) {
+            // Generate unique seat number for each booking
+            const seatNumber = `${Math.floor(Math.random() * 1000) + 1}${(seatInfo.seatType || 'window')[0].toUpperCase()}`;
+            const bookingData = {
+                userId: req.user._id,
+                routeId,
+                scheduleId,
+                travelDate: bookingDate,
+                departureTime,
+                passengerInfo: {
+                    name: (_g = passengerInfo.name) === null || _g === void 0 ? void 0 : _g.trim(),
+                    phone: (_h = passengerInfo.phone) === null || _h === void 0 ? void 0 : _h.trim(),
+                    email: ((_j = passengerInfo.email) === null || _j === void 0 ? void 0 : _j.trim()) || req.user.email,
+                    idType: passengerInfo.idType || 'nic',
+                    idNumber: (_k = passengerInfo.idNumber) === null || _k === void 0 ? void 0 : _k.trim(),
+                    passengerType: passengerType
+                },
+                seatInfo: {
+                    seatNumber: seatNumber,
+                    seatType: seatInfo.seatType || 'window',
+                    preferences: seatInfo.preferences || []
+                },
+                pricing: {
+                    basePrice,
+                    taxes,
+                    discounts,
+                    totalAmount,
+                    currency: 'LKR'
+                },
+                paymentInfo: {
+                    method: paymentMethod,
+                    status: (paymentInfo === null || paymentInfo === void 0 ? void 0 : paymentInfo.status) || (status === 'confirmed' ? 'completed' : 'pending'),
+                    ...((paymentInfo === null || paymentInfo === void 0 ? void 0 : paymentInfo.paymentId) && { paymentId: paymentInfo.paymentId }),
+                    ...((paymentInfo === null || paymentInfo === void 0 ? void 0 : paymentInfo.transactionId) && { transactionId: paymentInfo.transactionId }),
+                    ...((paymentInfo === null || paymentInfo === void 0 ? void 0 : paymentInfo.paidAt) && { paidAt: new Date(paymentInfo.paidAt) })
+                },
+                status: status || 'pending'
+            };
+            const booking = new Booking_1.default(bookingData);
+            bookings.push(booking);
+        }
+        // Save all bookings
         try {
-            await booking.save();
-            console.log('Booking saved successfully:', {
-                _id: booking._id.toString(),
-                bookingId: booking.bookingId,
-                status: booking.status,
-                createdAt: booking.createdAt
-            });
+            for (const booking of bookings) {
+                await booking.save();
+                createdBookings.push(booking);
+                console.log('Booking saved successfully:', {
+                    _id: booking._id.toString(),
+                    bookingId: booking.bookingId,
+                    seatNumber: booking.seatInfo.seatNumber,
+                    status: booking.status
+                });
+            }
         }
         catch (saveError) {
             console.error('Booking save error details:', {
@@ -457,6 +460,8 @@ const createBooking = async (req, res) => {
             });
             throw saveError;
         }
+        // Use the first booking as the main booking for response
+        const booking = createdBookings[0];
         // Create payment record with debugging (if not provided)
         let payment = null;
         if (!(paymentInfo === null || paymentInfo === void 0 ? void 0 : paymentInfo.paymentId)) {
@@ -531,28 +536,35 @@ const createBooking = async (req, res) => {
         }
         console.log('=== BOOKING CREATION COMPLETED SUCCESSFULLY ===');
         console.log('Final booking summary:', {
-            bookingId: booking.bookingId,
+            totalBookingsCreated: createdBookings.length,
+            mainBookingId: booking.bookingId,
             userId: booking.userId.toString(),
             routeName: ((_p = booking.routeId) === null || _p === void 0 ? void 0 : _p.name) || 'Unknown',
             status: booking.status,
             paymentStatus: (_q = booking.paymentInfo) === null || _q === void 0 ? void 0 : _q.status,
             totalAmount: (_r = booking.pricing) === null || _r === void 0 ? void 0 : _r.totalAmount,
-            seatNumber: (_s = booking.seatInfo) === null || _s === void 0 ? void 0 : _s.seatNumber
+            seatNumbers: createdBookings.map(b => b.seatInfo.seatNumber)
         });
         const responseData = {
-            message: 'Booking created successfully',
+            message: `${seatQuantity} seat${seatQuantity > 1 ? 's' : ''} booked successfully`,
             booking,
+            allBookings: createdBookings.map(b => ({
+                bookingId: b.bookingId,
+                seatNumber: b.seatInfo.seatNumber,
+                status: b.status
+            })),
             payment: payment ? {
                 id: payment._id,
                 paymentId: payment.paymentId,
                 status: payment.status,
-                transactionId: (_t = payment.transactionInfo) === null || _t === void 0 ? void 0 : _t.transactionId
+                transactionId: (_s = payment.transactionInfo) === null || _s === void 0 ? void 0 : _s.transactionId
             } : null,
             debug: {
                 createdAt: new Date().toISOString(),
                 routeFound: !!route,
                 paymentCreated: !!payment,
-                bookingId: booking.bookingId
+                bookingId: booking.bookingId,
+                totalSeatsBooked: seatQuantity
             }
         };
         console.log('Sending response with keys:', Object.keys(responseData));
@@ -1065,6 +1077,72 @@ const checkInPassenger = async (req, res) => {
     }
 };
 exports.checkInPassenger = checkInPassenger;
+// @desc    Get seat availability for a route/schedule  
+// @route   GET /api/bookings/seat-availability
+// @access  Private
+const getSeatAvailability = async (req, res) => {
+    try {
+        console.log('=== GET SEAT AVAILABILITY REQUEST ===');
+        if (!req.user) {
+            res.status(401).json({ message: 'Not authorized' });
+            return;
+        }
+        const { routeId, travelDate, departureTime } = req.query;
+        console.log('Seat availability request:', {
+            routeId,
+            travelDate,
+            departureTime,
+            userId: req.user._id.toString()
+        });
+        if (!routeId || !travelDate || !departureTime) {
+            res.status(400).json({ message: 'RouteId, travelDate, and departureTime are required' });
+            return;
+        }
+        // Get route information to know capacity
+        const route = await Route_1.default.findById(routeId);
+        if (!route) {
+            res.status(404).json({ message: 'Route not found' });
+            return;
+        }
+        const capacity = route.vehicleInfo.capacity;
+        const bookingDate = new Date(travelDate);
+        // Get all booked seats for this route/date/time
+        const bookedSeats = await Booking_1.default.find({
+            routeId,
+            travelDate: bookingDate,
+            departureTime,
+            status: { $in: ['confirmed', 'pending'] },
+            isActive: true
+        }).select('seatInfo.seatNumber seatInfo.seatType');
+        console.log(`Found ${bookedSeats.length} booked seats out of ${capacity} capacity`);
+        // Simple availability calculation
+        const availability = {
+            total: capacity,
+            booked: bookedSeats.length,
+            available: capacity - bookedSeats.length
+        };
+        console.log('Seat availability calculated:', availability);
+        res.json({
+            routeId,
+            travelDate,
+            departureTime,
+            capacity,
+            availability,
+            bookedSeats: bookedSeats.map(booking => ({
+                seatNumber: booking.seatInfo.seatNumber,
+                seatType: booking.seatInfo.seatType
+            }))
+        });
+    }
+    catch (error) {
+        console.error('GET SEAT AVAILABILITY ERROR:', error);
+        res.status(500).json({
+            message: 'Server error',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+};
+exports.getSeatAvailability = getSeatAvailability;
 // @desc    Get booking statistics
 // @route   GET /api/bookings/stats
 // @access  Private
