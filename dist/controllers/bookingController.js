@@ -300,18 +300,26 @@ const createBooking = async (req, res) => {
             return;
         }
         console.log('Route validation passed');
-        // Validate travel date with debugging
+        // Validate travel date with debugging (compare only dates, not times)
         const bookingDate = new Date(travelDate);
         const now = new Date();
+        // Reset times to midnight for accurate date comparison
+        const bookingDateOnly = new Date(bookingDate.getFullYear(), bookingDate.getMonth(), bookingDate.getDate());
+        const nowDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         console.log('Date validation:', {
             travelDate: travelDate,
             parsedDate: bookingDate.toISOString(),
             currentDate: now.toISOString(),
-            isPastDate: bookingDate < now,
-            daysDifference: Math.ceil((bookingDate.getTime() - now.getTime()) / (1000 * 3600 * 24))
+            bookingDateOnly: bookingDateOnly.toISOString(),
+            nowDateOnly: nowDateOnly.toISOString(),
+            isPastDate: bookingDateOnly < nowDateOnly,
+            daysDifference: Math.ceil((bookingDateOnly.getTime() - nowDateOnly.getTime()) / (1000 * 3600 * 24))
         });
-        if (bookingDate < now) {
-            console.error('Cannot book for past dates:', bookingDate);
+        if (bookingDateOnly < nowDateOnly) {
+            console.error('Cannot book for past dates:', {
+                bookingDate: bookingDateOnly.toISOString(),
+                currentDate: nowDateOnly.toISOString()
+            });
             res.status(400).json({ message: 'Cannot book for past dates' });
             return;
         }
