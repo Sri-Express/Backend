@@ -22,75 +22,10 @@ const connectDatabase = async () => {
         throw error;
     }
 };
-// ✅ FIXED: Added routeId to each sample route
+// Routes array - REMOVED Colombo → Kandy Express
 const sampleRoutes = [
     {
-        routeId: "RT001CBK", // ✅ Added routeId
-        name: "Colombo → Kandy Express",
-        startLocation: {
-            name: "Colombo Fort",
-            coordinates: [79.8612, 6.9271],
-            address: "Colombo Fort Railway Station, Colombo 01"
-        },
-        endLocation: {
-            name: "Kandy Central",
-            coordinates: [80.6337, 7.2906],
-            address: "Kandy Railway Station, Kandy"
-        },
-        waypoints: [
-            {
-                name: "Ragama",
-                coordinates: [80.0277, 7.0280],
-                estimatedTime: 30,
-                order: 1
-            },
-            {
-                name: "Gampaha",
-                coordinates: [80.0919, 7.0912],
-                estimatedTime: 45,
-                order: 2
-            }
-        ],
-        distance: 116,
-        estimatedDuration: 180,
-        schedules: [
-            {
-                departureTime: "06:00",
-                arrivalTime: "09:00",
-                frequency: 60,
-                daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
-                isActive: true
-            },
-            {
-                departureTime: "14:00",
-                arrivalTime: "17:00",
-                frequency: 60,
-                daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
-                isActive: true
-            }
-        ],
-        operatorInfo: {
-            companyName: "National Transport Commission",
-            contactNumber: "+94112456789"
-        },
-        vehicleInfo: {
-            type: "bus",
-            capacity: 45,
-            amenities: ["AC", "WiFi", "USB_Charging"]
-        },
-        pricing: {
-            basePrice: 250,
-            pricePerKm: 2.0,
-            discounts: [
-                { type: "student", percentage: 20 },
-                { type: "senior", percentage: 15 },
-                { type: "military", percentage: 10 }
-            ]
-        },
-        status: "active"
-    },
-    {
-        routeId: "RT002CBG", // ✅ Added routeId
+        routeId: "RT002CBG", // Updated route ID
         name: "Colombo → Galle Highway Express",
         startLocation: {
             name: "Colombo Fort",
@@ -155,7 +90,7 @@ const sampleRoutes = [
         status: "active"
     },
     {
-        routeId: "RT003CBJ", // ✅ Added routeId
+        routeId: "RT003CBJ", // Updated route ID
         name: "Colombo → Jaffna Intercity Express",
         startLocation: {
             name: "Colombo Fort",
