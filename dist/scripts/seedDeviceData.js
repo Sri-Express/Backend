@@ -31,8 +31,38 @@ const seedDeviceData = async () => {
             console.log(`⚠️  Found ${existingDevices.length} existing devices. Skipping seed.`);
             process.exit(0);
         }
-        // Create sample vehicles for testing
+        // Create sample vehicles for testing - INCLUDING CORRECT ESP32 DEVICE
         const sampleVehicles = [
+            {
+                deviceId: '68c0702b7d1cb7545d768ac2', // YOUR ESP32 DEVICE ID from the code!
+                vehicleNumber: 'bus-002',
+                vehicleType: 'bus',
+                status: 'online',
+                location: {
+                    latitude: 6.8408351, // CORRECT Kottawa Bus Stand coordinates
+                    longitude: 79.9639299, // CORRECT coordinates from Google Maps
+                    address: 'RXR7+8HM Kottawa Bus Station, Pannipitiya 10230',
+                    lastUpdated: new Date()
+                },
+                batteryLevel: 85,
+                signalStrength: 4,
+                assignedTo: {
+                    type: 'company_admin',
+                    userId: fleetManager._id,
+                    name: fleetManager.name
+                },
+                firmwareVersion: '2.1.0',
+                installDate: new Date('2024-01-15'),
+                alerts: {
+                    count: 0,
+                    messages: []
+                },
+                isActive: true,
+                route: {
+                    routeId: '68c0dcf350719c991fe9e5d8', // Route ID from your ESP32 code
+                    routeName: 'Kottawa → Mount Lavinia Express'
+                }
+            },
             {
                 deviceId: 'DEV_SRI_001',
                 vehicleNumber: 'WP-CAB-1234',

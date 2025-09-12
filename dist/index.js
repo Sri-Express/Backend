@@ -33,6 +33,7 @@ require("./models/KnowledgeBase"); // ⭐ NEW - Customer Service Models
 require("./models/WeatherChat"); // ⭐ ADD THIS LINE
 require("./models/RouteSlot"); // ⭐ NEW - Slot-based scheduling
 require("./models/SlotAssignment"); // ⭐ NEW - Slot-based scheduling
+require("./models/BusRating"); // ⭐ NEW - Bus Rating System
 // Import ALL routes
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const dashboardRoutes_1 = __importDefault(require("./routes/dashboardRoutes"));
@@ -48,6 +49,7 @@ const weatherRoutes_1 = __importDefault(require("./routes/weatherRoutes")); // �
 const routeAdminRoutes_1 = __importDefault(require("./routes/routeAdminRoutes"));
 const slotRoutes_1 = __importDefault(require("./routes/slotRoutes")); // ⭐ NEW - Slot-based scheduling
 const vehicleDocumentRoutes_1 = __importDefault(require("./routes/vehicleDocumentRoutes")); // ⭐ NEW - Vehicle Document Upload
+const busRatingRoutes_1 = __importDefault(require("./routes/busRatingRoutes")); // ⭐ NEW - Bus Rating System
 // Import middleware
 const errorMiddleware_1 = require("./middleware/errorMiddleware");
 // Import DB connection
@@ -397,6 +399,8 @@ app.use('/api/weather', weatherRoutes_1.default);
 // Route admin routes
 app.use('/api/route-admin', routeAdminRoutes_1.default);
 app.use('/api/slots', slotRoutes_1.default); // ⭐ NEW - Slot-based scheduling
+// Rating system routes
+app.use('/api/ratings', busRatingRoutes_1.default); // ⭐ NEW - Bus Rating System
 // Error handling middleware
 app.use(errorMiddleware_1.notFound);
 app.use(errorMiddleware_1.errorHandler);

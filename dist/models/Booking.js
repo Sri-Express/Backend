@@ -203,6 +203,28 @@ const BookingSchema = new mongoose_1.Schema({
             type: String,
         }
     },
+    ratingInfo: {
+        hasRated: {
+            type: Boolean,
+            default: false,
+        },
+        ratingId: {
+            type: mongoose_1.default.Schema.Types.ObjectId,
+            ref: 'BusRating',
+        },
+        ratedAt: {
+            type: Date,
+        },
+        overallRating: {
+            type: Number,
+            min: 1,
+            max: 5,
+        },
+        deviceId: {
+            type: mongoose_1.default.Schema.Types.ObjectId,
+            ref: 'Device',
+        }
+    },
     isActive: {
         type: Boolean,
         default: true,

@@ -114,7 +114,9 @@ export const getLiveLocations = async (req: Request, res: Response): Promise<voi
                 }
               }
             }
-          }
+          },
+          // Add fixed timestamp for frontend to calculate time properly
+          lastSeenTimestamp: '$timestamp'
         }
       }
     ]);

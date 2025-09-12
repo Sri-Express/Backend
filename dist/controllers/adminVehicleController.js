@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteVehicle = exports.getPendingVehicles = exports.bulkRejectVehicles = exports.bulkApproveVehicles = exports.rejectVehicle = exports.approveVehicle = exports.getVehicleById = exports.getVehicleStats = exports.getAllVehicles = void 0;
 const Device_1 = __importDefault(require("../models/Device")); // Use Device model instead of Vehicle
 const Fleet_1 = __importDefault(require("../models/Fleet"));
+const BusRating_1 = __importDefault(require("../models/BusRating"));
 const mongoose_1 = __importDefault(require("mongoose"));
 // @desc    Get all vehicles with filtering and approval status
 // @route   GET /api/admin/vehicles
@@ -51,8 +52,56 @@ const getAllVehicles = async (req, res) => {
             .limit(pageSize);
         // Get total count for pagination
         const totalVehicles = await Device_1.default.countDocuments(query);
+        // Add rating information to each vehicle
+        const vehiclesWithRatings = await Promise.all(vehicles.map(async (vehicle) => {
+            try {
+                const ratingStatsResult = await BusRating_1.default.getAverageRating(vehicle._id);
+                const ratingStats = Array.isArray(ratingStatsResult) && ratingStatsResult.length > 0
+                    ? ratingStatsResult[0]
+                    : {
+                        avgOverall: 0,
+                        avgCleanliness: 0,
+                        avgComfort: 0,
+                        avgCondition: 0,
+                        avgSafety: 0,
+                        avgPunctuality: 0,
+                        totalRatings: 0
+                    };
+                return {
+                    ...vehicle.toObject(),
+                    ratingStats: {
+                        averageRating: ratingStats.avgOverall || 0,
+                        totalRatings: ratingStats.totalRatings || 0,
+                        breakdown: {
+                            cleanliness: ratingStats.avgCleanliness || 0,
+                            comfort: ratingStats.avgComfort || 0,
+                            condition: ratingStats.avgCondition || 0,
+                            safety: ratingStats.avgSafety || 0,
+                            punctuality: ratingStats.avgPunctuality || 0
+                        }
+                    }
+                };
+            }
+            catch (error) {
+                console.error(`Error getting ratings for vehicle ${vehicle.vehicleNumber}:`, error);
+                return {
+                    ...vehicle.toObject(),
+                    ratingStats: {
+                        averageRating: 0,
+                        totalRatings: 0,
+                        breakdown: {
+                            cleanliness: 0,
+                            comfort: 0,
+                            condition: 0,
+                            safety: 0,
+                            punctuality: 0
+                        }
+                    }
+                };
+            }
+        }));
         res.json({
-            vehicles,
+            vehicles: vehiclesWithRatings,
             pagination: {
                 currentPage: pageNumber,
                 totalPages: Math.ceil(totalVehicles / pageSize),
