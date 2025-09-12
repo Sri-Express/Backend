@@ -49,6 +49,13 @@ export interface IBooking extends Document {
     checkInTime?: Date;
     checkInLocation?: string;
   };
+  ratingInfo?: {
+    hasRated: boolean;
+    ratingId?: mongoose.Types.ObjectId;
+    ratedAt?: Date;
+    overallRating?: number;   // Cache for quick access
+    deviceId?: mongoose.Types.ObjectId; // Which bus was rated
+  };
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -233,6 +240,28 @@ const BookingSchema = new Schema<IBooking>(
       },
       checkInLocation: {
         type: String,
+      }
+    },
+    ratingInfo: {
+      hasRated: {
+        type: Boolean,
+        default: false,
+      },
+      ratingId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'BusRating',
+      },
+      ratedAt: {
+        type: Date,
+      },
+      overallRating: {
+        type: Number,
+        min: 1,
+        max: 5,
+      },
+      deviceId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Device',
       }
     },
     isActive: {

@@ -30,6 +30,7 @@ import './models/KnowledgeBase';   // ⭐ NEW - Customer Service Models
 import './models/WeatherChat';     // ⭐ ADD THIS LINE
 import './models/RouteSlot';       // ⭐ NEW - Slot-based scheduling
 import './models/SlotAssignment';  // ⭐ NEW - Slot-based scheduling
+import './models/BusRating';       // ⭐ NEW - Bus Rating System
 
 // Import ALL routes
 import authRoutes from './routes/authRoutes';
@@ -46,6 +47,7 @@ import weatherRoutes from './routes/weatherRoutes';  // ⭐ ADD THIS LINE
 import routeAdminRoutes from './routes/routeAdminRoutes';
 import slotRoutes from './routes/slotRoutes';  // ⭐ NEW - Slot-based scheduling
 import vehicleDocumentRoutes from './routes/vehicleDocumentRoutes';  // ⭐ NEW - Vehicle Document Upload
+import busRatingRoutes from './routes/busRatingRoutes';  // ⭐ NEW - Bus Rating System
 
 
 // Import middleware
@@ -429,6 +431,9 @@ app.use('/api/weather', weatherRoutes);
 // Route admin routes
 app.use('/api/route-admin', routeAdminRoutes);
 app.use('/api/slots', slotRoutes);  // ⭐ NEW - Slot-based scheduling
+
+// Rating system routes
+app.use('/api/ratings', busRatingRoutes);  // ⭐ NEW - Bus Rating System
 
 // Error handling middleware
 app.use(notFound);

@@ -419,7 +419,9 @@ export const createBooking = async (req: Request, res: Response): Promise<void> 
       taxes, 
       discounts, 
       totalAmount,
-      passengerType
+      passengerType,
+      seatQuantity,
+      totalPaymentAmount: totalAmount * seatQuantity
     });
 
     // Create multiple bookings based on seatQuantity
@@ -508,11 +510,11 @@ export const createBooking = async (req: Request, res: Response): Promise<void> 
         userId: req.user._id,
         bookingId: booking._id,
         amount: {
-          subtotal: basePrice,
-          taxes,
+          subtotal: basePrice * seatQuantity,       // Fix: Multiply by seat quantity
+          taxes: taxes * seatQuantity,              // Fix: Multiply taxes by seat quantity
           fees: 0,
-          discounts,
-          total: totalAmount,
+          discounts: discounts * seatQuantity,      // Fix: Multiply discounts by seat quantity
+          total: totalAmount * seatQuantity,        // Fix: Multiply total by seat quantity
           currency: 'LKR'
         },
         paymentMethod: {
@@ -533,7 +535,9 @@ export const createBooking = async (req: Request, res: Response): Promise<void> 
       console.log('Creating payment with data:', {
         userId: paymentData.userId.toString(),
         bookingId: (paymentData.bookingId as Types.ObjectId).toString(),
-        total: paymentData.amount.total,
+        seatQuantity: seatQuantity,
+        pricePerSeat: totalAmount,
+        totalPaymentAmount: paymentData.amount.total,
         status: paymentData.status,
         transactionId: paymentData.transactionInfo.transactionId
       });
