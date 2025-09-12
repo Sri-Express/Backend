@@ -9,7 +9,7 @@ import Emergency from '../models/Emergency';
 
 export interface EmergencyNotification {
   id: string;
-  type: 'emergency_created' | 'emergency_resolved' | 'emergency_escalated' | 'broadcast' | 'critical_alert';
+  type: 'emergency_created' | 'emergency_resolved' | 'emergency_escalated' | 'broadcast' | 'critical_alert' | 'vehicle_update';
   title: string;
   message: string;
   priority: 'low' | 'medium' | 'high' | 'critical';
@@ -87,10 +87,23 @@ class OptimizedRealTimeEmergencyService {
       next();
     });
 
-    // Authentication middleware
+    // Authentication middleware - Allow anonymous connections for tracking
     this.io.use(async (socket: Socket, next) => {
       try {
         const token = socket.handshake.auth.token;
+        
+        // Allow anonymous connections for tracking page
+        if (token === 'anonymous-tracking-token') {
+          console.log('🔓 Anonymous tracking connection accepted');
+          socket.data.user = {
+            _id: 'anonymous',
+            name: 'Anonymous Viewer',
+            role: 'anonymous',
+            email: 'anonymous@tracking'
+          };
+          return next();
+        }
+        
         if (!token) {
           return next(new Error('Authentication error'));
         }
@@ -189,6 +202,9 @@ class OptimizedRealTimeEmergencyService {
         break;
       case 'client':
         rooms.push('users');
+        break;
+      case 'anonymous':
+        rooms.push('tracking_viewers'); // Anonymous users only get tracking updates
         break;
     }
     
@@ -560,6 +576,95 @@ class OptimizedRealTimeEmergencyService {
       default:
         this.io.to('all_users').emit(event, data);
         break;
+    }
+  }
+
+  // Vehicle tracking real-time methods
+  public async broadcastVehicleUpdate(vehicleData: any): Promise<void> {
+    console.log(`🚐 Broadcasting vehicle update: ${vehicleData.vehicleId} - ${vehicleData.connectionStatus}`);
+    
+    // Broadcast to all tracking page viewers (authenticated and anonymous)
+    this.io.to('all_users').emit('vehicle_status_update', {
+      vehicleId: vehicleData.vehicleId,
+      location: vehicleData.location,
+      connectionStatus: vehicleData.connectionStatus,
+      lastSeenMinutesAgo: vehicleData.lastSeenMinutesAgo,
+      timestamp: new Date(),
+      routeId: vehicleData.routeId
+    });
+    
+    // Also broadcast to anonymous tracking viewers
+    this.io.to('tracking_viewers').emit('vehicle_status_update', {
+      vehicleId: vehicleData.vehicleId,
+      location: vehicleData.location,
+      connectionStatus: vehicleData.connectionStatus,
+      lastSeenMinutesAgo: vehicleData.lastSeenMinutesAgo,
+      timestamp: new Date(),
+      routeId: vehicleData.routeId
+    });
+
+    // Also broadcast to specific route room if available
+    if (vehicleData.routeId) {
+      this.io.to(`route:${vehicleData.routeId}`).emit('vehicle_status_update', {
+        vehicleId: vehicleData.vehicleId,
+        location: vehicleData.location,
+        connectionStatus: vehicleData.connectionStatus,
+        lastSeenMinutesAgo: vehicleData.lastSeenMinutesAgo,
+        timestamp: new Date(),
+        routeId: vehicleData.routeId
+      });
+    }
+  }
+
+  public async broadcastVehicleOffline(vehicleId: string, routeId?: string): Promise<void> {
+    console.log(`🔴 Broadcasting vehicle offline: ${vehicleId}`);
+    
+    const offlineData = {
+      vehicleId,
+      connectionStatus: 'offline',
+      timestamp: new Date(),
+      routeId
+    };
+
+    // Broadcast to all tracking viewers
+    this.io.to('all_users').emit('vehicle_offline', offlineData);
+    this.io.to('tracking_viewers').emit('vehicle_offline', offlineData);
+    
+    // Also broadcast to route-specific room
+    if (routeId) {
+      this.io.to(`route:${routeId}`).emit('vehicle_offline', offlineData);
+    }
+  }
+
+  public async broadcastVehicleOnline(vehicleData: any): Promise<void> {
+    console.log(`🟢 Broadcasting vehicle online: ${vehicleData.vehicleId}`);
+    
+    // Broadcast to all tracking viewers
+    this.io.to('all_users').emit('vehicle_online', {
+      vehicleId: vehicleData.vehicleId,
+      location: vehicleData.location,
+      connectionStatus: 'online',
+      timestamp: new Date(),
+      routeId: vehicleData.routeId
+    });
+    
+    this.io.to('tracking_viewers').emit('vehicle_online', {
+      vehicleId: vehicleData.vehicleId,
+      location: vehicleData.location,
+      connectionStatus: 'online',
+      timestamp: new Date(),
+      routeId: vehicleData.routeId
+    });
+
+    // Also broadcast to route-specific room
+    if (vehicleData.routeId) {
+      this.io.to(`route:${vehicleData.routeId}`).emit('vehicle_online', {
+        vehicleId: vehicleData.vehicleId,
+        location: vehicleData.location,
+        connectionStatus: 'online',
+        timestamp: new Date(),
+        routeId: vehicleData.routeId
+      });
     }
   }
 

@@ -1,0 +1,50 @@
+{
+  "deviceId": "68c0702b7d1cb7545d768ac2",
+  "vehicleId": "bus-002",
+  "location": {
+    "latitude": 6.8408351,
+    "longitude": 79.9639299,
+    "accuracy": 5.0,
+    "heading": 45.0,
+    "speed": 25.5,
+    "altitude": 50.0
+  },
+  "routeProgress": {
+    "currentWaypoint": 0,
+    "distanceCovered": 0.0,
+    "estimatedTimeToDestination": 30,
+    "nextStopETA": "2025-01-10T15:30:00Z",
+    "progressPercentage": 50.0
+  },
+  "passengerLoad": {
+    "currentCapacity": 25,
+    "maxCapacity": 50,
+    "boardingCount": 0,
+    "alightingCount": 0,
+    "loadPercentage": 50.0
+  },
+  "operationalInfo": {
+    "driverInfo": {
+      "driverId": "DRIVER_001",
+      "driverName": "Bus Driver",
+      "contactNumber": "+94771234567"
+    },
+    "tripInfo": {
+      "tripId": "TRIP_123456789",
+      "scheduleId": "SCH_001",
+      "departureTime": "08:00",
+      "estimatedArrival": "2025-01-10T15:30:00Z",
+      "routeId": "68c0dcf350719c991fe9e5d8"
+    },
+    "status": "on_route",
+    "delays": {
+      "currentDelay": 0,
+      "reason": ""
+    }
+  },
+  "environmentalData": {
+    "weather": "sunny",
+    "temperature": 28,
+    "trafficCondition": "moderate"
+  }
+}

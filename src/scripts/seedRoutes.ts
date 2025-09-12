@@ -23,6 +23,71 @@ const connectDatabase = async () => {
 // Routes array - REMOVED Colombo → Kandy Express
 const sampleRoutes = [
   {
+    routeId: "RT001KML", // NEW: Kottawa to Mount Lavinia route
+    name: "Kottawa → Mount Lavinia Express",
+    startLocation: {
+      name: "Kottawa Bus Stand", 
+      coordinates: [79.9639299, 6.8408351], // CORRECT coordinates from Google Maps
+      address: "RXR7+8HM Kottawa Bus Station, Pannipitiya 10230"
+    },
+    endLocation: {
+      name: "Mount Lavinia",
+      coordinates: [79.8638, 6.8389], // Mount Lavinia coordinates  
+      address: "Mount Lavinia Bus Stand, Mount Lavinia"
+    },
+    waypoints: [
+      {
+        name: "Maharagama",
+        coordinates: [79.9275, 6.8448],
+        estimatedTime: 10,
+        order: 1
+      },
+      {
+        name: "Nugegoda", 
+        coordinates: [79.8990, 6.8748],
+        estimatedTime: 20,
+        order: 2
+      }
+    ],
+    distance: 15,
+    estimatedDuration: 45,
+    schedules: [
+      {
+        departureTime: "06:00",
+        arrivalTime: "06:45", 
+        frequency: 15,
+        daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+        isActive: true
+      },
+      {
+        departureTime: "17:30",
+        arrivalTime: "18:15",
+        frequency: 15, 
+        daysOfWeek: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+        isActive: true
+      }
+    ],
+    operatorInfo: {
+      companyName: "Western Provincial Transport",
+      contactNumber: "+94112123456"
+    },
+    vehicleInfo: {
+      type: "bus" as const,
+      capacity: 50,
+      amenities: ["Comfortable_Seats", "Standing_Space"]
+    },
+    pricing: {
+      basePrice: 35,
+      pricePerKm: 2.5,
+      discounts: [
+        { type: "student" as const, percentage: 25 },
+        { type: "senior" as const, percentage: 20 },
+        { type: "military" as const, percentage: 15 }
+      ]
+    },
+    status: "active" as const
+  },
+  {
     routeId: "RT002CBG", // Updated route ID
     name: "Colombo → Galle Highway Express",
     startLocation: {
