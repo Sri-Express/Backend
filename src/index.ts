@@ -31,6 +31,7 @@ import './models/WeatherChat';     // ⭐ ADD THIS LINE
 import './models/RouteSlot';       // ⭐ NEW - Slot-based scheduling
 import './models/SlotAssignment';  // ⭐ NEW - Slot-based scheduling
 import './models/BusRating';       // ⭐ NEW - Bus Rating System
+import './models/LostAndFound';    // ⭐ NEW - Lost and Found System
 
 // Import ALL routes
 import authRoutes from './routes/authRoutes';
@@ -48,6 +49,7 @@ import routeAdminRoutes from './routes/routeAdminRoutes';
 import slotRoutes from './routes/slotRoutes';  // ⭐ NEW - Slot-based scheduling
 import vehicleDocumentRoutes from './routes/vehicleDocumentRoutes';  // ⭐ NEW - Vehicle Document Upload
 import busRatingRoutes from './routes/busRatingRoutes';  // ⭐ NEW - Bus Rating System
+import lostAndFoundRoutes from './routes/lostAndFoundRoutes';  // ⭐ NEW - Lost and Found System
 
 
 // Import middleware
@@ -124,6 +126,7 @@ app.get('/', (req, res) => {
       payments: '/api/payments',
       customerService: '/api/cs',        // ⭐ NEW
       weather: '/api/weather',              // ⭐ ADD THIS
+      lostAndFound: '/api/lost-found',      // ⭐ NEW
       websocket: 'ws://localhost:' + PORT
     },
     totalEndpoints: '130+',              // ⭐ UPDATED
@@ -344,6 +347,23 @@ app.get('/api', (req, res) => {
           'PUT /preferences - Update preferences (auth)'
         ]
       },
+      lostAndFound: {                       // ⭐ NEW - Lost and Found System
+        base: '/api/lost-found',
+        endpoints: [
+          'GET / - Get all lost and found items (with filters)',
+          'GET /:id - Get single item details',
+          'POST / - Report new lost/found item (auth)',
+          'PUT /:id - Update item details (auth)',
+          'DELETE /:id - Delete item (auth)',
+          'POST /:id/claim - Claim an item (auth)',
+          'GET /:id/matches - Get potential matches',
+          'POST /:id/matches - Mark items as matches (auth)',
+          'GET /user/my-items - Get user\'s items (auth)',
+          'GET /stats - Get system statistics',
+          'POST /:id/extend - Extend item expiry (auth)',
+          'GET /categories - Get available categories'
+        ]
+      },
       realTimeEmergency: {
         base: 'WebSocket connection required',
         events: [
@@ -435,6 +455,9 @@ app.use('/api/slots', slotRoutes);  // ⭐ NEW - Slot-based scheduling
 // Rating system routes
 app.use('/api/ratings', busRatingRoutes);  // ⭐ NEW - Bus Rating System
 
+// Lost and Found routes
+app.use('/api/lost-found', lostAndFoundRoutes);  // ⭐ NEW - Lost and Found System
+
 // Error handling middleware
 app.use(notFound);
 app.use(errorHandler);
@@ -524,6 +547,7 @@ const startServer = async () => {
       console.log('📍   📍 Live Tracking: http://localhost:' + PORT + '/api/tracking/*');
       console.log('📍   💳 Payment Processing: http://localhost:' + PORT + '/api/payments/*');
       console.log('📍   🌤️  Weather System: http://localhost:' + PORT + '/api/weather/*');
+      console.log('📍   🔍 Lost & Found: http://localhost:' + PORT + '/api/lost-found/*');
       console.log('🎯 ================================================================');
       console.log('🎯 CUSTOMER SERVICE ENDPOINTS:');                                    // ⭐ NEW
       console.log('🎯   🎫 CS Dashboard: http://localhost:' + PORT + '/api/cs/dashboard');
